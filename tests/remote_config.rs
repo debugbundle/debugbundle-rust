@@ -149,6 +149,54 @@ impl Server {
             ..Config::new("synthetic", "checkout")
         })
     }
+
+    fn captured_requests(&self) -> Vec<(String, u16)> {
+        self.events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|event| {
+                // A contended best-effort call can produce this operational
+                // summary. It is neither a policy leak nor a captured request.
+                if event["event_type"] == "error_suppressed"
+                    && event["payload"]["reason"] == "queue_pressure"
+                {
+                    return None;
+                }
+                assert_eq!(event["event_type"], "request_event", "{event:?}");
+                Some((
+                    event["payload"]["path"].as_str().unwrap().to_owned(),
+                    u16::try_from(event["payload"]["response_status"].as_u64().unwrap()).unwrap(),
+                ))
+            })
+            .collect()
+    }
+
+    async fn capture_request(&self, client: &Client, path: &str, status: u16) {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            client.capture_request(
+                &debugbundle::RequestSnapshot {
+                    method: "GET".into(),
+                    path: path.into(),
+                    status,
+                    ..Default::default()
+                },
+                &Context::default(),
+            );
+            assert!(client.flush_async(Duration::from_secs(2)).await.drained);
+            // Flush does not reserve the state lock for the next nonblocking
+            // capture. Retry only absent admission, never an incorrect event.
+            if self.captured_requests().iter().any(|(p, _)| p == path) {
+                return;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "request was never admitted: {path}"
+            );
+            tokio::task::yield_now().await;
+        }
+    }
 }
 fn wait(client: &Client) {
     let deadline = Instant::now() + Duration::from_secs(2);
@@ -285,20 +333,18 @@ async fn failed_initial_discovery_stays_minimal_until_a_valid_legacy_response_ar
     let server = Server::new(json!({}));
     server.config_status.store(500, Ordering::Release);
     let client = server.client();
-    for status in [408, 500] {
-        client.capture_request(
-            &debugbundle::RequestSnapshot {
-                method: "GET".into(),
-                path: format!("/unknown-{status}"),
-                status,
-                ..Default::default()
-            },
-            &Context::default(),
-        );
-    }
-    assert!(client.flush_async(Duration::from_secs(2)).await.drained);
+    client.capture_request(
+        &debugbundle::RequestSnapshot {
+            method: "GET".into(),
+            path: "/unknown-408".into(),
+            status: 408,
+            ..Default::default()
+        },
+        &Context::default(),
+    );
+    server.capture_request(&client, "/unknown-500", 500).await;
     assert!(!client.remote_config_ready());
-    assert_eq!(server.events.lock().unwrap().len(), 1);
+    assert_eq!(server.captured_requests(), [("/unknown-500".into(), 500)]);
     server.config_status.store(200, Ordering::Release);
     let deadline = Instant::now() + Duration::from_secs(2);
     while !client.remote_config_ready() {
@@ -308,19 +354,10 @@ async fn failed_initial_discovery_stays_minimal_until_a_valid_legacy_response_ar
         assert!(Instant::now() < deadline);
         tokio::task::yield_now().await;
     }
-    client.capture_request(
-        &debugbundle::RequestSnapshot {
-            method: "GET".into(),
-            path: "/known-legacy".into(),
-            status: 408,
-            ..Default::default()
-        },
-        &Context::default(),
-    );
-    assert!(client.flush_async(Duration::from_secs(2)).await.drained);
+    server.capture_request(&client, "/known-legacy", 408).await;
     assert_eq!(
-        server.events.lock().unwrap().len(),
-        2,
+        server.captured_requests(),
+        [("/unknown-500".into(), 500), ("/known-legacy".into(), 408)],
         "valid legacy config restores compatible balanced policy"
     );
 }
