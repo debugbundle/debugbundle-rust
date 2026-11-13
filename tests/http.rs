@@ -12,6 +12,15 @@ fn server(
     body: Vec<u8>,
     delay: Duration,
 ) -> (String, mpsc::Receiver<String>) {
+    server_with_headers(status, "", body, delay)
+}
+
+fn server_with_headers(
+    status: &'static str,
+    headers: &'static str,
+    body: Vec<u8>,
+    delay: Duration,
+) -> (String, mpsc::Receiver<String>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
     let (tx, rx) = mpsc::channel();
@@ -24,7 +33,7 @@ fn server(
         let n = stream.read(&mut buffer).unwrap();
         let _ = tx.send(String::from_utf8_lossy(&buffer[..n]).into_owned());
         std::thread::sleep(delay);
-        let header=format!("HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",body.len());
+        let header=format!("HTTP/1.1 {status}\r\n{headers}Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",body.len());
         let _ = stream.write_all(header.as_bytes());
         let _ = stream.write_all(&body);
     });
@@ -117,4 +126,56 @@ async fn low_level_transport_rejects_credential_queries_and_discovery_identity()
         .config(None, "dbundle_proj_SYNTHETIC_SECRET", "test")
         .await
         .is_err());
+}
+
+#[tokio::test]
+async fn application_gzip_feature_cannot_bypass_the_sdk_response_encoding_boundary() {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    let compressed = STANDARD
+        .decode("H4sIAAAAAAAC/6tWSkxOTi0oSU1RsjLUUSpKzUpNBnMMdJRSi4ryi4qVrKJjawHEPoRqJwAAAA==")
+        .unwrap();
+    // This real response proves Cargo has enabled automatic decompression in
+    // the application's reqwest. SDK requests must still reject these bytes.
+    let (endpoint, _) = server_with_headers(
+        "202 Accepted",
+        "Content-Encoding: gzip\r\n",
+        compressed.clone(),
+        Duration::ZERO,
+    );
+    let control = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .unwrap()
+        .get(endpoint)
+        .send()
+        .await
+        .unwrap()
+        .json::<serde_json::Value>()
+        .await
+        .unwrap();
+    assert_eq!(control["accepted"], 1);
+    for config_request in [false, true] {
+        let (endpoint, request) = server_with_headers(
+            "202 Accepted",
+            "Content-Encoding: gzip\r\n",
+            compressed.clone(),
+            Duration::ZERO,
+        );
+        let transport =
+            HttpTransport::new(&endpoint, "synthetic", Duration::from_secs(1), true, None).unwrap();
+        let reply = if config_request {
+            transport.config(None, "checkout", "test").await
+        } else {
+            transport.send(br#"{"events":[]}"#.to_vec()).await
+        };
+        assert!(
+            reply.is_err(),
+            "compressed response bypassed the SDK boundary"
+        );
+        assert!(request
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap()
+            .to_lowercase()
+            .contains("accept-encoding: identity"));
+    }
 }

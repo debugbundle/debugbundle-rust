@@ -345,50 +345,19 @@ impl ExceptionSnapshot {
         self
     }
     pub fn with_cause(mut self, cause: &Self) -> Self {
-        let mut nodes = self.graph["nodes"].as_array().cloned().unwrap_or_default();
-        let causes = cause.graph["nodes"].as_array().cloned().unwrap_or_default();
         // Keep an earlier cause and allow aggregates beside the single causal
         // edge. Every addition must preserve reachability and the shared limits.
-        if nodes.len() + causes.len() > 8
-            || nodes.is_empty()
-            || !nodes[0]["relationships"].as_array().is_some_and(|edges| {
-                edges.len() < 5
-                    && !edges
-                        .iter()
-                        .any(|edge| edge["kind"] == "cause" || edge["kind"] == "context")
+        if !self.graph["nodes"][0]["relationships"]
+            .as_array()
+            .is_some_and(|edges| {
+                !edges
+                    .iter()
+                    .any(|edge| edge["kind"] == "cause" || edge["kind"] == "context")
             })
+            || !self.append_graph(cause, "cause")
         {
             self.mark_truncated();
-            return self;
         }
-        let offset = nodes.len() as u64;
-        if let Some(edges) = nodes[0]["relationships"].as_array_mut() {
-            edges.push(json!({"kind":"cause","target_id":offset}));
-        } else {
-            self.mark_truncated();
-            return self;
-        }
-        for mut node in causes {
-            if let Some(id) = node["id"].as_u64() {
-                node["id"] = json!(id + offset);
-            }
-            if let Some(edges) = node["relationships"].as_array_mut() {
-                for edge in edges {
-                    if let Some(id) = edge["target_id"].as_u64() {
-                        edge["target_id"] = json!(id + offset);
-                    }
-                }
-            }
-            nodes.push(node);
-        }
-        let original = self.graph.clone();
-        self.graph["nodes"] = Value::Array(nodes);
-        if !crate::wire::valid_graph(&self.graph) {
-            self.graph = original;
-            self.mark_truncated();
-            return self;
-        }
-        self.inherit_status(cause);
         self.fit();
         self
     }
@@ -420,39 +389,11 @@ impl ExceptionSnapshot {
     pub fn with_aggregate(mut self, children: &[ExceptionSnapshot]) -> Self {
         let mut accepted = 0;
         for child in children.iter().take(5) {
-            // Explicit snapshot children are already protected. Root-only
-            // aggregate children avoid accidental cycles and keep depth honest.
-            // Commit each child independently so pressure retains earlier data.
-            let mut candidate = self.graph.clone();
-            let Some(nodes) = candidate["nodes"].as_array_mut() else {
-                break;
-            };
-            let id = nodes.len();
-            let Some(edges) = nodes
-                .first_mut()
-                .and_then(|root| root["relationships"].as_array_mut())
-            else {
-                break;
-            };
-            if id >= 8 || edges.len() >= 5 {
-                break;
-            }
-            let mut node = child.graph["nodes"][0].clone();
-            node["id"] = json!(id);
-            node["relationships"] = json!([]);
-            edges.push(json!({"kind":"aggregate","target_id":id}));
-            nodes.push(node);
-            if !crate::wire::valid_graph(&candidate) {
-                break;
-            }
-            self.graph = candidate;
-            accepted += 1;
-            self.inherit_status(child);
-            if !child.graph["nodes"][0]["relationships"]
-                .as_array()
-                .is_some_and(Vec::is_empty)
-            {
-                self.mark_truncated();
+            // Snapshot graphs are immutable owned data, so copying their edges
+            // cannot create a cycle. Validate the combined depth/bytes as well
+            // as node/edge counts before committing each entire child graph.
+            if self.append_graph(child, "aggregate") {
+                accepted += 1;
             }
         }
         if children.len() > accepted {
@@ -460,6 +401,52 @@ impl ExceptionSnapshot {
         }
         self.fit();
         self
+    }
+    fn append_graph(&mut self, child: &Self, kind: &str) -> bool {
+        let mut candidate = self.clone();
+        candidate.inherit_status(child);
+        let Some(nodes) = candidate.graph["nodes"].as_array_mut() else {
+            return false;
+        };
+        let Some(children) = child.graph["nodes"].as_array() else {
+            return false;
+        };
+        let offset = nodes.len() as u64;
+        if nodes.len() + children.len() > 8 {
+            return false;
+        }
+        let Some(edges) = nodes
+            .first_mut()
+            .and_then(|node| node["relationships"].as_array_mut())
+        else {
+            return false;
+        };
+        if edges.len() >= 5 {
+            return false;
+        }
+        edges.push(json!({"kind":kind,"target_id":offset}));
+        for source in children {
+            let mut node = source.clone();
+            let Some(id) = node["id"].as_u64() else {
+                return false;
+            };
+            node["id"] = json!(id + offset);
+            let Some(edges) = node["relationships"].as_array_mut() else {
+                return false;
+            };
+            for edge in edges {
+                let Some(id) = edge["target_id"].as_u64() else {
+                    return false;
+                };
+                edge["target_id"] = json!(id + offset);
+            }
+            nodes.push(node);
+        }
+        if !crate::wire::valid_graph(&candidate.graph) {
+            return false;
+        }
+        self.graph = candidate.graph;
+        true
     }
     fn mark_truncated(&mut self) {
         self.graph["truncated"] = json!(true);

@@ -172,6 +172,11 @@ impl Privacy {
     }
 
     pub fn sensitive_key(&self, key: &str) -> bool {
+        // Public helper calls receive the same bound as object/query traversal.
+        // Never allocate or run the segment matcher for an unchecked long name.
+        if key.len() > 128 {
+            return true;
+        }
         let Some(p) = PATTERNS.as_ref() else {
             return true;
         };

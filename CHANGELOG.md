@@ -27,6 +27,11 @@ local dependencies and hidden metadata are excluded and rejected before extracti
 Local Linux qualification includes exact-crate consumers, real Core ingestion and
 local CLI processing, published Browser-to-both-Rust-relay checks, per-file line
 coverage, bounded sanitizer fuzzing and measured resource/cost regression budgets.
-This is source work in progress: native platform acceptance and final source /
-artifact / release reconciliation remain open. No package publication or consumer
-adoption is implied.
+The baseline candidate passed Linux x64/arm64, native macOS/Windows and extracted-
+artifact qualification. The deep audit adds full nested snapshot graph remapping,
+bounded public privacy-key matching, explicit Rustls and disabled automatic
+response decompression even when an application enables reqwest compression.
+Real certificate-chain, hostname, expiry, redirect and stalled-handshake tests
+plus a feature-unified gzip regression run with the packaged test suite.
+The audit candidate requires fresh qualification; publication remains on hold.
+No package publication or consumer adoption is implied.

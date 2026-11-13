@@ -1,8 +1,6 @@
 # Rust API and runtime boundaries
 
-This is an unpublished source candidate. Framework middleware and browser relay
-routes are implemented; full qualification remains in progress. Nothing here establishes
-registry or installed-artifact acceptance.
+This SDK remains unpublished. Its baseline source and extracted-crate matrix passed on Linux x64/arm64, macOS and Windows. Audit refinements require fresh qualification; registry publication and consumer adoption remain separate. See [qualification](qualification.md).
 
 ## Client and capture
 
@@ -19,9 +17,7 @@ messages, supplied stacks, causes, aggregate children and `with_frames` structur
 frames. `TraceOrigin` identifies capture, runtime-reported, unknown or unavailable
 origin. No automatic stack capture, symbolisation or invented throw site occurs.
 Cause and aggregate builders compose in either order. An existing cause is kept;
-aggregate calls append protected root snapshots within the same five-edge,
-eight-node and 32 KiB graph limits. Omitted children or nested child relationships
-set truncation and `budget_exceeded` while preserving previously accepted nodes.
+aggregate calls append complete protected child graphs, including nested causes and aggregate relationships, within the same five-edge, eight-node, four-edge-depth and 32 KiB limits. A child graph that cannot fit is omitted with truncation and `budget_exceeded`; previously accepted nodes remain intact.
 UTF-8 field clipping also reports truncation. Child limitations propagate through
 composition; an `unsafe` reason remains visible when the graph also reaches a
 budget, including fallback to its retained primary node.
@@ -41,6 +37,9 @@ bodies above 8 KiB are omitted. `capture_deploy(&DeploySnapshot)` records explic
 deployment metadata. Capture methods return no delivery guarantee.
 
 `Context::new(&Value)` copies a bounded object; `with` adds protected fields.
+`client.set_context(&context)` replaces the client's protected persistent metadata;
+active operation and per-capture context overlay it. It does not install a global
+request scope. Use request/operation context for concurrent per-request values.
 Mandatory credential rules always apply and `redact_fields` only extends them.
 Trace/session helpers accept opaque UUIDv4 values. `with_request_id` accepts a
 nonempty printable ASCII identifier up to 128 bytes; values changed by mandatory
@@ -324,7 +323,7 @@ framework worker/handler never resets these allowances. `axum::browser_relay(rel
 application; `actix_web::browser_relay(relay)` returns a native service factory.
 Both mount `/debugbundle/browser`, admit work before reading a body, limit
 streamed bodies to 256 KiB/4,096 frames and end stalled reads after five seconds
-with 408. Wider relay qualification remains open.
+with 408. Both adapters participate in the native and extracted-crate qualification matrix.
 
 Axum plain listeners should use
 `into_make_service_with_connect_info::<std::net::SocketAddr>()` to supply the
@@ -400,9 +399,7 @@ false means the spool did not prove drained. SDK callback re-entry returns false
 Pending records expire after seven days from local admission; delivered records
 remain for 24 hours from canonical completion. A private directory is bounded to
 1,000 physical files and 100 MiB, including metadata/headroom. Corrupt, forged,
-foreign or replaced files fail closed and cannot manufacture receipts. Native
-Linux source tests cover restart, partial ACK, credential rotation and retention;
-native macOS/Windows and complete installed-artifact qualification remain open.
+foreign or replaced files fail closed and cannot manufacture receipts. Native Linux, macOS and Windows source/extracted-crate tests cover restart, partial ACK, credential rotation and retention. Registry consumers remain a separate post-publication check.
 Network acceptance followed by a crash before ACK persistence may replay an ID;
 this is at-least-once delivery, with canonical event IDs preserved for deduplication.
 
@@ -462,6 +459,4 @@ and single-link regular files, and uses flushed data plus write-through atomic
 publication. The pinned directory ancestors cannot be renamed while retained.
 Only `storage/windows/ffi.rs` permits SDK-owned unsafe Win32 ABI calls, with owned
 buffers and RAII allocations/handles; application error traversal stays sealed and
-unsafe-free. Windows cross-compilation is verified under Rust 1.89. Native ACL,
-filesystem, full relay and platform coverage tests still require native CI. Other
-local-file platforms fail closed.
+unsafe-free. Windows cross-compilation is verified under Rust 1.89. Native CI executes ACL, filesystem, relay and coverage tests on Windows and macOS as well as Linux. Other local-file platforms fail closed.

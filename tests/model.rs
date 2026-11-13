@@ -51,6 +51,52 @@ fn safe_snapshots_preserve_causes_and_honest_trace_origins() {
 }
 
 #[test]
+fn aggregate_snapshots_preserve_nested_safe_graphs_within_contract_budgets() {
+    let cause = ExceptionSnapshot::new("Cause", "password=SYNTHETIC_SECRET");
+    let branch = ExceptionSnapshot::new("Branch", "nested failure")
+        .with_cause(&cause)
+        .with_aggregate(&[ExceptionSnapshot::new("Sibling", "independent failure")]);
+    let child = ExceptionSnapshot::new("Child", "group").with_aggregate(&[branch]);
+    let snapshot = ExceptionSnapshot::new("Root", "primary").with_aggregate(&[child]);
+    assert_canonical_snapshot(&snapshot);
+    let graph = snapshot.evidence();
+    assert_eq!(graph["nodes"].as_array().unwrap().len(), 5);
+    assert_eq!(graph["truncated"], false);
+    assert_eq!(graph["unavailable_reason"], Value::Null);
+    assert_eq!(
+        graph["nodes"][0]["relationships"],
+        json!([{"kind":"aggregate","target_id":1}])
+    );
+    assert_eq!(
+        graph["nodes"][1]["relationships"],
+        json!([{"kind":"aggregate","target_id":2}])
+    );
+    assert_eq!(
+        graph["nodes"][2]["relationships"],
+        json!([
+            {"kind":"cause","target_id":3}, {"kind":"aggregate","target_id":4}
+        ])
+    );
+    assert_eq!(graph["nodes"][3]["name"], "Cause");
+    assert!(!graph.to_string().contains("SYNTHETIC_SECRET"));
+}
+
+#[test]
+fn aggregate_depth_exhaustion_preserves_earlier_edges_without_fabricating_completeness() {
+    let mut child = ExceptionSnapshot::new("Leaf", "leaf");
+    for _ in 0..4 {
+        child = ExceptionSnapshot::new("Branch", "branch").with_cause(&child);
+    }
+    let snapshot = ExceptionSnapshot::new("Root", "primary")
+        .with_cause(&ExceptionSnapshot::new("OriginalCause", "keep"))
+        .with_aggregate(&[child]);
+    assert_canonical_snapshot(&snapshot);
+    assert_eq!(snapshot.evidence()["nodes"][1]["name"], "OriginalCause");
+    assert_eq!(snapshot.evidence()["truncated"], true);
+    assert_eq!(snapshot.evidence()["unavailable_reason"], "budget_exceeded");
+}
+
+#[test]
 fn repeated_snapshot_causes_are_bounded_without_erasing_the_primary() {
     let mut snapshot = ExceptionSnapshot::new("Root", "failure");
     for _ in 0..20 {
@@ -101,20 +147,30 @@ fn supplied_frames_are_protected_and_bounded_without_inventing_a_throw_site() {
 }
 
 #[test]
-fn aggregate_snapshots_bound_children_and_keep_only_owned_protected_roots() {
+fn aggregate_snapshots_bound_children_and_preserve_owned_protected_relationships() {
     let child = ExceptionSnapshot::new("Inner", "password=SYNTHETIC_SECRET")
         .with_cause(&ExceptionSnapshot::new("Cause", "synthetic"));
     let snapshot =
         ExceptionSnapshot::new("Aggregate", "many failures").with_aggregate(&vec![child; 10]);
     let graph = snapshot.evidence();
-    assert_eq!(graph["nodes"].as_array().unwrap().len(), 6);
+    assert_canonical_snapshot(&snapshot);
+    assert_eq!(graph["nodes"].as_array().unwrap().len(), 7);
     assert_eq!(
         graph["nodes"][0]["relationships"].as_array().unwrap().len(),
-        5
+        3
     );
     assert_eq!(graph["truncated"], true);
-    for node in &graph["nodes"].as_array().unwrap()[1..] {
-        assert_eq!(node["relationships"], json!([]));
+    for (index, nodes) in graph["nodes"].as_array().unwrap()[1..]
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .enumerate()
+    {
+        assert_eq!(
+            nodes[0]["relationships"],
+            json!([{"kind":"cause","target_id":2 + index * 2}])
+        );
+        assert_eq!(nodes[1]["relationships"], json!([]));
     }
     assert!(!serde_json::to_string(graph)
         .unwrap()

@@ -1,9 +1,6 @@
 # Candidate qualification
 
-This is an unpublished SDK candidate. Local Linux arm64 qualification does not
-establish native macOS, Windows or Linux x64 acceptance. The public repository
-exists; no source commit, push, registry publication or consumer adoption is
-implied by these commands.
+This is an unpublished SDK candidate. The public source baseline `244c104` passed [all eight CI jobs](https://github.com/debugbundle/debugbundle-rust/actions/runs/43406799897), including Linux x64/arm64, native macOS/Windows and consumers of one immutable crate. Audit changes require a fresh run and artifact seal. Running local Linux tests alone never establishes other platforms, registry publication or consumer adoption.
 
 `make verify test-core test-loggers test-panic test-msrv test-current coverage audit` owns the
 source gates. Coverage measures executable lines in every production module for
@@ -116,6 +113,25 @@ container. AddressSanitizer is enabled; `cfg(fuzzing)` is deliberately disabled
 so production security checks remain active. The long-lived SDK runtime makes
 process-exit leak detection unsuitable, so this lane disables that oracle and
 retains the separate ownership/cardinality/cleanup tests. It is not exhaustive
-fuzzing or a formal concurrency model. Native-platform file/relay qualification, additional adverse
-filesystem/runtime gates and the final exact-artifact/release review remain open;
-see the core implementation record for the full outstanding matrix.
+fuzzing or a formal concurrency model. Native-platform file/relay and exact-artifact checks are CI gates for every candidate. Deep audit fixes must pass them before a later, separately approved release.
+
+## TLS handshake coverage
+
+`transport::tests` uses a real Rustls loopback server and synthetic root,
+intermediate and leaf certificates. The production transport builder and
+request/response path exercise authenticated event/config traffic, wrong hostname,
+untrusted root, missing intermediate, expired leaf, redirect refusal and a stalled
+handshake. Positive fixtures add a root only to their private client using
+reqwest's native-root merge; they never modify the machine trust store or disable
+certificate validation. No custom-root configuration API or alternate TLS backend
+is advertised. These tests run in source and extracted-crate suites on each
+native CI target. `make tls-fixtures` regenerates only the synthetic certificate
+JSON offline; the server private key is test material and is never trusted outside
+this fixture.
+
+The packaged HTTP regression suite enables reqwest gzip as a development-only
+consumer feature. It proves an application client can decode a real compressed
+response while the SDK rejects it for both ingestion and configuration. This
+protects the response-size/encoding boundary from Cargo feature unification.
+`make audit-test-lock` resolves added test-only dependencies; routine gates use
+`--locked`. Test dependencies do not enter a normal core-only consumer graph.

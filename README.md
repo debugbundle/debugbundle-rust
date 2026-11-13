@@ -2,8 +2,7 @@
 
 Safe, bounded runtime error reporting for vanilla Rust, Tokio, Axum and Actix Web.
 
-This is an unreleased implementation in progress. Use the core implementation
-record at `spec/sdks/rust-sdk-progress.md` for verified gates and pending work.
+This SDK is an unpublished candidate under deep audit. The baseline source and exact-crate CI matrix passed on Linux x64/arm64, macOS and Windows. Audit fixes require a fresh candidate. See [qualification](docs/qualification.md) for evidence and the separate release gates.
 
 No crates.io release is available from this work. `make package` prepares a local
 candidate; `make smoke-package` tests its extracted contents in isolated vanilla,
@@ -29,14 +28,14 @@ fn main() {
         &Context::default(),
     );
     let outcome = client.flush(Duration::from_secs(2));
-    assert!(outcome.drained && outcome.accepted_events == 1);
+    println!("Accepted local events: {}", outcome.accepted_events);
 }
 ```
 
 Run `debugbundle process` in that application to read its canonical local arrays.
-Local file runtime tests currently run on Linux. The Windows private-file backend
-cross-compiles under Rust 1.89; native macOS/Windows qualification remains open.
-These are release blockers for those local/relay platform claims.
+Capture is best effort: if no event was accepted, check `client.status()` and retry
+the explicit verification event. A drained queue alone is not a delivery receipt.
+Private file and relay runtime tests run natively on Linux, macOS and Windows; a cross-compile alone does not qualify an OS backend.
 
 For connected capture, retain the default `http` feature and use
 `Client::new(Config::from_env())`. Set `DEBUGBUNDLE_PROJECT_TOKEN`,
@@ -49,7 +48,7 @@ development. Missing/invalid credentials produce an inactive client visible in
 
 | Feature | Purpose |
 | --- | --- |
-| `http` (default) | Pooled Rustls HTTP; explicit proxy/TLS configuration |
+| `http` (default) | Pooled Rustls HTTP with native trust; optional explicit proxy |
 | `local` | Private event files and durable browser relay storage |
 | `tower` | Native Tower readiness/future/body lifecycle |
 | `axum` | Axum middleware and browser relay; includes HTTP/local/Tower |
@@ -73,8 +72,7 @@ for complete lifecycle, body opt-in, proxy/peer, spool and status semantics.
 ## Development
 
 Use Docker-backed `make test`, `make typecheck`, `make lint`, `make test-features`
-and `make package`. The minimum supported Rust version is 1.89; qualification
-continues across the complete native/platform matrix. Current and previous stable
+and `make package`. The minimum supported Rust version is 1.89; CI includes that compiler and the complete native/platform matrix. Current and previous stable
 source lanes use Rust 1.100.0 and 1.99.1. No Rust installation on the host is required.
 
 ## Safety model
@@ -85,9 +83,7 @@ Complete delivery requires canonical indexed acknowledgements.
 
 The current API and its runtime limits are documented in
 [the API guide](docs/runtime-and-api.md) and [configuration reference](docs/configuration.md). Axum/Tower and Actix middleware have
-source integration tests. Extracted-crate vanilla/Axum/Actix consumers and genuine
-published Browser ordinary/beacon/keepalive relay paths pass on Linux arm64.
-Native platform and final release qualification remain in progress. See the
+source integration tests. Extracted-crate vanilla/Axum/Actix consumers run on Linux x64/arm64, macOS and Windows; genuine published Browser ordinary/beacon/keepalive relay paths run on Linux arm64. Audit refinements must pass those gates again. See the
 [qualification guide](docs/qualification.md) and
 [manual release procedure](docs/releasing.md) for exact artifact and registry gates.
 

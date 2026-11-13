@@ -61,6 +61,14 @@ fn budgets_withhold_oversized_names_and_values() {
 }
 
 #[test]
+fn public_key_matcher_rejects_oversized_names_before_segment_work() {
+    let privacy = Privacy::new(&[]).unwrap();
+    assert!(!privacy.sensitive_key(&"x".repeat(128)));
+    assert!(privacy.sensitive_key(&"x".repeat(129)));
+    assert!(privacy.sensitive_key(&"x_".repeat(100_000)));
+}
+
+#[test]
 fn unified_arbitrary_precision_numbers_cannot_escape_native_value_budgets() {
     let privacy = Privacy::new(&[]).unwrap();
     let number: Value = serde_json::from_str(&format!("1{}", "0".repeat(100_000))).unwrap();

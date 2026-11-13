@@ -1,6 +1,8 @@
 //! SDK-owned HTTP transport. Credentials live only on authenticated requests.
 use serde_json::Value;
 use std::time::{Duration, Instant, SystemTime};
+#[cfg(test)]
+mod tests;
 #[derive(Clone)]
 pub struct HttpTransport {
     client: reqwest::Client,
@@ -24,6 +26,23 @@ impl HttpTransport {
         allow_http: bool,
         proxy: Option<&str>,
     ) -> Option<Self> {
+        Self::build(
+            endpoint,
+            token,
+            timeout,
+            allow_http,
+            proxy,
+            reqwest::Client::builder(),
+        )
+    }
+    fn build(
+        endpoint: &str,
+        token: &str,
+        timeout: Duration,
+        allow_http: bool,
+        proxy: Option<&str>,
+        builder: reqwest::ClientBuilder,
+    ) -> Option<Self> {
         if endpoint.len() > 8192 {
             return None;
         }
@@ -38,8 +57,15 @@ impl HttpTransport {
         {
             return None;
         }
-        let mut builder = reqwest::Client::builder()
+        let mut builder = builder
+            .tls_backend_rustls()
             .no_proxy()
+            // Consumer feature unification must not hide Content-Encoding or
+            // decompress bytes before our bounded response checks.
+            .no_gzip()
+            .no_brotli()
+            .no_deflate()
+            .no_zstd()
             .redirect(reqwest::redirect::Policy::none())
             .timeout(timeout)
             .connect_timeout(timeout)

@@ -99,6 +99,12 @@ verify: format-check lint typecheck test test-features package
 lock:
 	$(CARGO) generate-lockfile $(LOCK_ARGS)
 
+.PHONY: tls-fixtures audit-test-lock
+tls-fixtures:
+	$(DOCKER_RUN) --network none $(RUST_IMAGE) sh scripts/generate-tls-fixtures.sh
+audit-test-lock:
+	$(CARGO) check --all-targets --all-features
+
 .PHONY: panic-lock test-panic
 panic-lock:
 	$(CARGO) generate-lockfile --manifest-path smoke/panic-profiles/Cargo.toml

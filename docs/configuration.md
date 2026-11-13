@@ -56,8 +56,11 @@ platform linker are needed when compiling from source. There is no advertised
 alternate TLS backend in this candidate. The public dependency graph and MSRV
 must be qualified together, using the frozen test/consumer resolutions.
 
-Private local output/durable relay currently has Linux/macOS source support;
-other platforms return `Unsupported` and never fall back to HTTP. Native platform
-qualification and the first-release platform decision remain open. See
+Private local output/durable relay supports Linux, macOS and Windows, with native runtime and extracted-crate qualification on all three. Other platforms return `Unsupported` and never fall back to HTTP. See
 [runtime boundaries](runtime-and-api.md) for callback, panic, logging, proof,
 operation, recovery, relay and cleanup semantics.
+
+HTTP uses explicit Rustls verification and requests identity-encoded responses.
+Automatic gzip/Brotli/deflate/zstd response decompression is disabled on the SDK
+client even when another dependency enables reqwest compression features;
+compressed responses fail closed before JSON or indexed-ACK processing.
