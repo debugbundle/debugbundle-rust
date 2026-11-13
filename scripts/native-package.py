@@ -15,8 +15,16 @@ import unicodedata
 
 
 def run(command, cwd, env, timeout=600):
-    return subprocess.run(command, cwd=cwd, env=env, check=True, text=True,
-                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout).stdout
+    try:
+        return subprocess.run(command, cwd=cwd, env=env, check=True, text=True,
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout).stdout
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        # Successful receipts are written by the caller. A failing subprocess
+        # must still expose its captured test diagnostics in the CI job log.
+        output = error.output or ""
+        print(output.decode(errors="replace") if isinstance(output, bytes) else output,
+              end="", flush=True)
+        raise
 
 
 def verify_digest(artifact, expected=None):

@@ -7,6 +7,8 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
+import subprocess
+from contextlib import redirect_stdout
 from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location("native_package", Path(__file__).with_name("native-package.py"))
@@ -17,6 +19,18 @@ REQUIRED = ["Cargo.toml", "Cargo.lock", "LICENSE", "README.md", "docs/runtime-an
 
 
 class NativeArtifactTests(unittest.TestCase):
+    def test_failed_and_timed_out_commands_preserve_diagnostics(self):
+        for error in (subprocess.CalledProcessError(101, ["synthetic"], output="failed test output\n"),
+                      subprocess.TimeoutExpired(["synthetic"], 1, output=b"timed out output\n")):
+            output = io.StringIO()
+            with self.subTest(error=type(error).__name__), redirect_stdout(output), \
+                    patch.object(NATIVE.subprocess, "run", side_effect=error), \
+                    self.assertRaises(type(error)) as raised:
+                NATIVE.run(["synthetic"], Path("."), {})
+            self.assertIs(raised.exception, error)
+            expected = error.output.decode() if isinstance(error.output, bytes) else error.output
+            self.assertEqual(output.getvalue(), expected)
+
     def artifact(self, directory, extra=()):
         artifact = directory / (ROOT + ".crate")
         with tarfile.open(artifact, "w:gz") as archive:
