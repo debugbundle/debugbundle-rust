@@ -2,16 +2,20 @@
 set -eu
 mode=${1:?preflight or publish required}
 case "$mode" in preflight|publish) ;; *) exit 2 ;; esac
+output="$PWD/.tmp/release"
+mkdir -p "$output"
 version=${RELEASE_VERSION:?release version required}
 source_sha=${RELEASE_SOURCE_SHA:?immutable source commit required}
 test "${#source_sha}" -eq 40
 case "$source_sha" in *[!0-9a-f]*) exit 2 ;; esac
-test "$(git rev-parse HEAD)" = "$source_sha"
-test -z "$(git status --porcelain --untracked-files=normal)" || { echo "Release requires a clean committed checkout" >&2; exit 1; }
+# This exact checkout is deliberately bind-mounted from the hosted runner into
+# a root-owned container. Trust only this path for these Git calls.
+actual_source=$(git -c safe.directory="$PWD" rev-parse HEAD)
+test "$actual_source" = "$source_sha"
+source_status=$(git -c safe.directory="$PWD" status --porcelain --untracked-files=normal)
+test -z "$source_status" || { echo "Release requires a clean committed checkout" >&2; exit 1; }
 test "$(cargo pkgid --locked | sed 's/.*@//')" = "$version"
 sh scripts/check-candidate.sh
-output="$PWD/.tmp/release"
-mkdir -p "$output"
 if [ "$mode" = preflight ]; then
     # Cargo publish creates a package again. Pin the compiler/lock/source and
     # compare that dry-run package with the artifact every OS qualified.

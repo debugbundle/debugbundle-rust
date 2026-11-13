@@ -1,67 +1,60 @@
 # Release qualification and ownership
 
-The SDK is an unpublished candidate. Preparing these files does not publish,
-commit or push it. Release and consumer adoption require separate instructions.
-The owner has placed releases on hold pending a deep audit. Passing qualification
-does not lift that hold or authorise publication.
+Rust follows the SDK release pattern: a `v*` version tag starts `Crate release`.
+The version must already match Cargo.toml, and the exact source commit must have
+passed the complete eight-job `SDK qualification` workflow on main. A tag is an
+explicit release action; ordinary main pushes qualify source without publishing.
+`workflow_dispatch` is retained for recovery, with an optional `release_ref`
+(default `main`). No manual version, checksum or authentication selection is needed.
 
-`SDK qualification` builds one immutable `rust-candidate` artifact, records its
-SHA-256 and passes those bytes to Linux x64/arm64, native macOS/Windows and the
-Browser relay consumers. Every selected-artifact lane rejects a checksum mismatch.
-Source/MSRV/feature/coverage/fuzz/resource checks remain distinct receipts. All
-required jobs must pass on the release commit; local Linux checks cannot replace
-native platform qualification.
+The release planner resolves the source on main's history, checks the latest
+qualification for that exact commit, and requires all eight jobs to have passed.
+It downloads that run's immutable `rust-candidate`, verifies its package/VCS
+identity and checksum receipt, then derives the release inputs. An active source
+qualification is awaited, not duplicated. Failed, incomplete, fork/PR, different-
+source and expired/unavailable artifact evidence cannot qualify a release.
 
-Before the first release, the owner must confirm the public `debugbundle` crate
-name and chosen crates.io ownership. `make crate-namespace` only reads public
-state: a 404 neither reserves the name nor assigns ownership. First publication
-requires a narrowly scoped bootstrap API token: trusted publishing requires an
-existing crate and owner configuration. After the first publication, configure
-trusted publishing for `debugbundle/debugbundle-rust`, workflow `release.yml`,
-environment `crates-io`, and remove/revoke the bootstrap token. These are manual
-owner actions, not performed by qualification.
+The qualified SDK checkout is separate from the release-tooling checkout. A
+release-tooling repair can therefore publish an already-qualified SDK commit
+without changing or rebuilding its archive. Current tooling repackages that clean
+source using its own pinned compiler and lockfile, and compares the resulting
+bytes before any publishing credential is used. Git's ownership exception is
+command-scoped to that deliberate container checkout, never a global wildcard.
+Every new SDK source/artifact still requires its own complete native qualification.
 
-Create the GitHub `crates-io` environment with required owner review before
-enabling publication. Keep `CRATES_IO_BOOTSTRAP_TOKEN` only in that environment
-when bootstrap is explicitly selected; subsequent releases select `trusted` and
-use the short-lived token from the official action. No token is embedded in
-artifacts or command arguments. A missing selected credential fails rather than
-falling back to another authentication mode.
+The `crates-io` GitHub environment permits main recovery and version tags. In the
+owner-selected automated release configuration it has no per-release reviewer
+prompt, matching the other SDK distribution workflows. Only an authorised version
+tag or explicit recovery dispatch starts publication; qualification alone does not.
 
-For an explicitly authorised release, use `Manual crate release` on the exact
-qualified `main` commit, entering the reviewed version and candidate SHA-256 from
-that commit's qualification run. The workflow reruns the complete qualification
-matrix, compares the entered identity, then waits for environment approval. It
-does not publish on push, pull request, a tag, or qualification alone. No tag or
-GitHub release is created automatically.
+First publication uses the environment's `CRATES_IO_BOOTSTRAP_TOKEN` only while
+the public crate namespace is absent. Once the crate exists, the workflow selects
+Trusted Publishing for `debugbundle/debugbundle-rust`, workflow `release.yml`,
+environment `crates-io`. Configure that identity on crates.io after bootstrap,
+then revoke/remove the bootstrap token. A trusted-authentication failure never
+falls back to the bootstrap credential. Initial account/registry ownership is a
+one-time prerequisite, not a per-release form.
 
-The publish job uses the same digest-pinned compiler/container and frozen lockfile
-as candidate creation. It requires a clean committed checkout at the immutable
-workflow SHA. Cargo's dry-run publish repackages the source; that result must match
-the qualified candidate before obtaining a token. The live standard Cargo publish
-uses the same locked source and is checked again afterward. The registry's index
-checksum and downloaded `.crate` must also match. Cargo does not expose a command
-to upload a prebuilt archive, so these reproducibility and registry checks are
-essential; a successful command alone is not an exact-artifact receipt.
+An existing, non-yanked version with the same public checksum selects verification
+only and never uploads again. A mismatched/yanked version fails closed. There is
+no automatic upload retry: an upload can succeed before Cargo reports a timeout.
+Inspect public state and preserve receipts before recovery, yanking, changing
+ownership or taking any further publication action.
 
-`RELEASE_VERSION=... RELEASE_SHA256=... make smoke-published` reads the public
-index, downloads the exact version, verifies its checksum/non-yanked state and
-records public ownership. It creates fresh consumers with an exact registry
-version and no SDK path override, records the new public dependency resolution,
-then freezes it before running vanilla, Axum and non-Send Actix applications.
-All runtime traffic stays on isolated container loopback. These consumers can
-resolve newer compatible dependencies than the local artifact lane; their actual
-lock and metadata are retained rather than assumed equivalent. Use a fresh
-checkout/qualification directory for each registry run. This lane is intentionally
-unrun while the crate is unpublished.
+`make smoke-published` verifies the public index checksum, downloaded crate and
+owners, then builds real exact-version registry consumers with no SDK path
+override. Vanilla, Axum and genuinely non-Send Actix applications run on isolated
+loopback. Their actual new registry resolution is retained and frozen before
+execution; it is not assumed equal to the development lockfile. Only after this
+acceptance does the workflow create the normal versioned GitHub release, with a
+prerelease flag for alpha/beta versions. Existing version tags are never retargeted.
 
-If publish times out or any subsequent checksum/consumer gate fails, preserve the
-receipts and inspect public registry state before taking any further publishing
-action. Cargo can time out after a successful upload. Do not automatically retry,
-yank, change ownership, replace a release or update consumers. A checksum mismatch
-after upload is a release incident requiring an explicit owner decision.
+Release diagnostics are created before preflight and retained on early failure,
+including container stderr, exit status and timeout output. Missing diagnostic
+files cannot replace the primary failure with an artifact-upload error. The SDK
+archive and source identity remain separate from the release-tooling identity.
 
 References: [Cargo publish](https://doc.rust-lang.org/cargo/commands/cargo-publish.html),
 [registry index](https://doc.rust-lang.org/cargo/reference/registry-index.html),
-[trusted publishing prerequisites](https://crates.io/docs/trusted-publishing),
+[trusted publishing](https://crates.io/docs/trusted-publishing),
 [official authentication action](https://github.com/rust-lang/crates-io-auth-action/blob/v1.0.6/README.md).
