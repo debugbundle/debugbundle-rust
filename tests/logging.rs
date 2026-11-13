@@ -180,6 +180,69 @@ fn log_tee_preserves_existing_sink_and_dynamic_arguments_are_not_evaluated() {
     );
 }
 
+#[cfg(feature = "log")]
+#[test]
+fn disabled_and_detached_loggers_preserve_application_filtering_and_flush() {
+    use log::Log;
+    struct FilteredSink {
+        records: Arc<AtomicUsize>,
+        flushes: Arc<AtomicUsize>,
+    }
+    impl Log for FilteredSink {
+        fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
+            metadata.level() == log::Level::Error
+        }
+        fn log(&self, _: &log::Record<'_>) {
+            self.records.fetch_add(1, Ordering::SeqCst);
+        }
+        fn flush(&self) {
+            self.flushes.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+    for disabled in [true, false] {
+        let recorder = Arc::new(Recorder::default());
+        let mut configuration = configured(recorder.clone());
+        configuration.enabled = !disabled;
+        let client = Client::new(configuration);
+        if !disabled {
+            client.detach_logging();
+        }
+        let logger = client.logger();
+        assert!(!logger.enabled(&log::Metadata::builder().level(log::Level::Error).build()));
+        logger.log(
+            &log::Record::builder()
+                .level(log::Level::Error)
+                .args(format_args!("{UnsafeValue}"))
+                .build(),
+        );
+        let records = Arc::new(AtomicUsize::new(0));
+        let flushes = Arc::new(AtomicUsize::new(0));
+        let logger = logger.tee(Arc::new(FilteredSink {
+            records: records.clone(),
+            flushes: flushes.clone(),
+        }));
+        for level in [log::Level::Info, log::Level::Error] {
+            assert_eq!(
+                logger.enabled(&log::Metadata::builder().level(level).build()),
+                level == log::Level::Error
+            );
+            logger.log(
+                &log::Record::builder()
+                    .level(level)
+                    .args(format_args!("{UnsafeValue}"))
+                    .build(),
+            );
+        }
+        logger.flush();
+        assert_eq!(records.load(Ordering::SeqCst), 1);
+        assert_eq!(flushes.load(Ordering::SeqCst), 1);
+        assert_eq!(FORMATTERS.load(Ordering::SeqCst), 0);
+        assert!(client.flush(Duration::from_secs(2)).drained);
+        assert!(recorder.events_without_pressure().is_empty());
+        client.shutdown(Duration::from_secs(2));
+    }
+}
+
 #[cfg(feature = "tracing")]
 #[test]
 fn detach_stops_only_sdk_logging_and_full_error_queues_skip_field_visits() {

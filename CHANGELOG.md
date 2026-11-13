@@ -40,5 +40,11 @@ Rejected or capacity-exhausted configuration now disposes application hooks,
 transports and limiter stores through separate unwind boundaries, preventing an
 initialization failure from escaping or double-panicking across SDK fields.
 Synchronous bootstrap limits remain explicit; admitted-client cleanup is deferred.
+Disabled native logging without an application sink returns before the record-
+building frame and recursion guard. Application tee filtering, callbacks and flush
+remain active when SDK capture is disabled or detached. Existing performance
+budgets and benchmark samples remain unchanged.
+Rejected recursive calls preserve the outer guard for native log/tracing
+adapters and panic observation, including repeated application-bridge attempts.
 The audit candidate requires fresh qualification; publication remains on hold.
 No package publication or consumer adoption is implied.

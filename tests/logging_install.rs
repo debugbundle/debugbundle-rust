@@ -21,9 +21,11 @@ impl Log for ApplicationSink {
         true
     }
     fn log(&self, _: &log::Record<'_>) {
-        self.records.fetch_add(1, Ordering::SeqCst);
-        if self.recursive {
+        let previous = self.records.fetch_add(1, Ordering::SeqCst);
+        // Bound the deliberately recursive fixture even if the SDK guard fails.
+        if self.recursive && previous < 8 {
             log::error!("recursive application bridge");
+            log::error!("second recursive application bridge");
         }
     }
     fn flush(&self) {

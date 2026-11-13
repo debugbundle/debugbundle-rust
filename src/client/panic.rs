@@ -20,6 +20,16 @@ impl Drop for Entered {
         OBSERVING.with(|flag| flag.set(false));
     }
 }
+fn enter() -> Option<Entered> {
+    OBSERVING.with(|flag| {
+        // A rejected nested hook must not acquire and drop the outer hook's guard.
+        if flag.replace(true) {
+            None
+        } else {
+            Some(Entered)
+        }
+    })
+}
 struct Registration {
     active: AtomicBool,
     client: Weak<Inner>,
@@ -88,9 +98,8 @@ impl Client {
         if !INSTALLED.swap(true, Ordering::AcqRel) {
             let previous = std::panic::take_hook();
             std::panic::set_hook(Box::new(move |info| {
-                let entered = OBSERVING.with(|flag| !flag.replace(true));
-                let _guard = entered.then_some(Entered);
-                if entered && !crate::runtime::internal() {
+                let guard = enter();
+                if guard.is_some() && !crate::runtime::internal() {
                     observe(info);
                 }
                 previous(info);
@@ -193,4 +202,22 @@ fn snapshot(inner: &Inner, info: &PanicHookInfo<'_>) -> Option<Value> {
         json!({"panic":{"payload_available":text.is_some(),"location":location}}),
         &correlation,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{enter, observing};
+
+    #[test]
+    fn rejected_nested_observation_preserves_the_outer_guard() {
+        let outer = enter().expect("outer panic observation enters");
+        for _ in 0..2 {
+            assert!(enter().is_none());
+            assert!(observing(), "rejection must retain outer panic suppression");
+        }
+        drop(outer);
+        assert!(!observing());
+        assert!(enter().is_some());
+        assert!(!observing());
+    }
 }
