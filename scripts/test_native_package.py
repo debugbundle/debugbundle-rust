@@ -51,7 +51,9 @@ class NativeArtifactTests(unittest.TestCase):
             member.size = -512
             artifact = directory / (ROOT + ".crate")
             artifact.write_bytes(gzip.compress(member.tobuf(format=tarfile.GNU_FORMAT) + b"\0" * 1024))
-            with self.assertRaises(RuntimeError):
+            # Newer Python readers reject this header before prepare() receives
+            # its first member. Both paths must fail before creating output.
+            with self.assertRaises((RuntimeError, tarfile.TarError)):
                 NATIVE.prepare(artifact, directory / "output")
             self.assertFalse((directory / "output").exists())
 
