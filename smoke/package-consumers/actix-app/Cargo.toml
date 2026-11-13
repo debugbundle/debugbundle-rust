@@ -1,0 +1,12 @@
+[package]
+name = "artifact-actix"
+version = "0.0.0"
+edition = "2021"
+publish = false
+[dependencies]
+debugbundle = { workspace = true, features = ["actix-web", "tracing", "log"] }
+artifact-support.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+actix-web.workspace = true
+reqwest.workspace = true

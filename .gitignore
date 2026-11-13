@@ -1,0 +1,14 @@
+/target/
+/.tmp/
+/.debugbundle/
+*.crate
+.env
+.env.*
+.DS_Store
+node_modules/
+__pycache__/
+*.pyc
+/fuzz/target/
+/fuzz/corpus/
+/fuzz/artifacts/
+/fuzz/coverage/

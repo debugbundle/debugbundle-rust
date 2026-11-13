@@ -1,0 +1,6 @@
+*
+!Dockerfile.test
+!Dockerfile.coverage
+!Dockerfile.audit
+!Dockerfile.windows
+!Dockerfile.fuzz

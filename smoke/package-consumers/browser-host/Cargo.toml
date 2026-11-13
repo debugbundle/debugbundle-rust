@@ -1,0 +1,13 @@
+[package]
+name = "artifact-browser-host"
+version = "0.0.0"
+edition = "2021"
+publish = false
+[dependencies]
+debugbundle = { workspace = true, features = ["axum", "actix-web"] }
+artifact-support.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+axum.workspace = true
+actix-web.workspace = true

@@ -1,0 +1,23 @@
+[package]
+name = "debugbundle-resource-benchmark"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.89"
+publish = false
+
+[dependencies]
+debugbundle = { path = "../..", features = ["testkit", "tracing", "log", "axum", "actix-web"] }
+allocation-counter = "=0.8.1"
+serde_json = "1"
+tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "net", "sync", "time"] }
+axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio", "matched-path"] }
+actix-web = { version = "4.19.0", default-features = false, features = ["macros"] }
+tower = { version = "0.5.2", features = ["util"] }
+http-body-util = "0.1"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["registry", "std"] }
+log = "0.4"
+
+[lints.rust]
+unsafe_code = "forbid"
+[workspace]

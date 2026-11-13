@@ -1,0 +1,25 @@
+name: Bug report
+description: Report a reproducible Rust SDK defect using synthetic data.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Report suspected vulnerabilities privately using SECURITY.md. Remove live credentials and customer payloads.
+  - type: input
+    id: versions
+    attributes:
+      label: SDK, Rust and operating system versions
+      placeholder: SDK version or revision, rustc version, OS/architecture
+    validations:
+      required: true
+  - type: input
+    id: features
+    attributes:
+      label: Enabled features and framework versions
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal synthetic reproduction
+      description: Include expected and actual behaviour, configuration without tokens, and bounded test output.
+    validations:
+      required: true

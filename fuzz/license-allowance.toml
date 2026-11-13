@@ -1,0 +1,8 @@
+# Appended only to the generated fuzz audit policy, never the production SDK
+# policy. libfuzzer-sys includes LLVM's NCSA-licensed test instrumentation and
+# MIT/Apache-2.0 Rust wrappers. The frozen package declares both obligations.
+# License text: https://spdx.org/licenses/NCSA.html
+[[licenses.exceptions]]
+name = "libfuzzer-sys"
+version = "=0.4.13"
+allow = ["MIT", "Apache-2.0", "NCSA"]

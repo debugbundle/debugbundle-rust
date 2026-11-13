@@ -1,0 +1,46 @@
+[package]
+name = "debugbundle-fuzz"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+debugbundle = { path = "..", version = "=1.0.0-alpha.1", default-features = false, features = ["local", "testkit"] }
+libfuzzer-sys = "=0.4.13"
+serde_json = "1"
+tokio = { version = "1.53", features = ["rt", "time"] }
+tempfile = "3"
+
+[[bin]]
+name = "wire"
+path = "fuzz_targets/wire.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "snapshots"
+path = "fuzz_targets/snapshots.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "relay"
+path = "fuzz_targets/relay.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "files"
+path = "fuzz_targets/files.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]

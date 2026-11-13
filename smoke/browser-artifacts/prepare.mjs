@@ -1,0 +1,18 @@
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { build } from "esbuild";
+const lock = JSON.parse(await readFile(new URL("package-lock.json",import.meta.url),"utf8"));
+const browser = lock.packages["node_modules/@debugbundle/sdk-browser"];
+assert.equal(browser.version,"3.2.2");
+assert.match(browser.resolved,/^https:\/\/registry\.npmjs\.org\//);
+assert.match(browser.integrity,/^sha512-/);
+const installed = JSON.parse(await readFile(new URL("node_modules/@debugbundle/sdk-browser/package.json",import.meta.url),"utf8"));
+assert.equal(installed.version,browser.version);
+const output = new URL("../../.tmp/browser-qualification/",import.meta.url);
+await mkdir(output,{recursive:true});
+const compiled = await build({stdin:{contents:'export * from "@debugbundle/sdk-browser";',resolveDir:new URL(".",import.meta.url).pathname},bundle:true,write:false,format:"iife",globalName:"DebugBundle",platform:"browser",minify:true});
+const bundle = compiled.outputFiles[0].contents;
+await writeFile(new URL("sdk.js",output),bundle);
+await writeFile(new URL("browser-provenance.json",output),JSON.stringify({browser,dependencies:lock.packages,bundle_sha256:createHash("sha256").update(bundle).digest("hex"),node:process.version},null,2));
+console.log(`Prepared published Browser ${browser.version}, ${bundle.length} bundled bytes`);

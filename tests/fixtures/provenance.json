@@ -1,0 +1,13 @@
+{
+  "core_revision": "f90bd82b61e46b8ee1dd58a0e621e1d0a7cb82f0",
+  "source": "current DebugBundle core working tree, 2026-11-12",
+  "sha256": {
+    "evidence-wire-cases.json": "c47b4fbd41fb992e0c7fa17a8335f75671672c54497ae849f06f8ae46aede890",
+    "privacy-conformance.json": "f428a555e5163f80e4ed627edff12ab264a05e289b62d7b15fd4f454c8c0f6ee",
+    "relay-compliance.json": "fd29542a49ac44d531a577cbf5dd93cf145836a5d828341a22d5d0bb37b20c49",
+    "event-envelope.schema.json": "41202613c05efdef754ffe3f6c3ac149c75cb445c0047a5cb2332acb164a7922",
+    "stack-formats.json": "0ffffe1ebb70853c9da72f588a3d9ed6496b1720d5cfc7c0250994a3ac7c2d34",
+    "analytics-envelope.schema.json": "3f500c9dffc783506fef73fdb76147b0d7d1784fe5cd6a4dafc98c05499caf50",
+    "analytics-wire-cases.json": "845cf92d58a4e4843f55a01f0f45d06e5f91579bd90cebc2465fefda6acfe162"
+  }
+}

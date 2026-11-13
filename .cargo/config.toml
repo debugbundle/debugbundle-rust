@@ -1,0 +1,8 @@
+# Tests share the deliberately bounded process client/callback registries.
+# Individual concurrency tests create their own simultaneous tasks and clients.
+[env]
+RUST_TEST_THREADS = { value = "1", force = false }
+
+# Keep all-feature integration-test links within the shared Docker memory budget.
+[build]
+jobs = 1

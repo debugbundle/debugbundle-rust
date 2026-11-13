@@ -1,0 +1,524 @@
+{
+  "schema_version": 1,
+  "architecture": "aarch64",
+  "platform": "Linux Docker; 2 CPUs pinned 0,1; 2 GiB; developer Docker Desktop host, mixed concurrent qualification load",
+  "rust_image": "rust:1.99.1-bookworm@sha256:e6f2cff35d0f309acf8433b4f05878ed77092602c5065cc81801177da0bb3a9c",
+  "instrumentation": "current-thread allocation-counter 0.8.1; timings include its overhead; setup, queue seeding, drain and snapshot reads excluded",
+  "policy": "p99 <= four times worst of three measured repeats, rounded up to 1 us, floor 2.5 us; caller allocation totals <= 110 percent of worst repeat; measured zero allocations remain exactly zero. These are instrumented regression guardrails, not a product latency SLA. Host variance is explicit.",
+  "source_digest_sha256": "1285a8039da9467a005c15cd842e62e75eef8949ec6aa7592371a40843b7100a",
+  "reports": [
+    {
+      "name": "native-peer-green.json",
+      "sha256": "30217b6f27ef75ca03ede763150d42325797f38736290b2595b911c9cf6205cb",
+      "memory_and_threads": [
+        "VmHWM:\t   15624 kB",
+        "VmRSS:\t   15624 kB",
+        "Threads:\t4"
+      ]
+    },
+    {
+      "name": "native-peer-two.json",
+      "sha256": "102c10d220da109a35acaed846df6cbcaf2cbf88bf1535b35fd35f0b191ccab0",
+      "memory_and_threads": [
+        "VmHWM:\t   15572 kB",
+        "VmRSS:\t   15572 kB",
+        "Threads:\t4"
+      ]
+    },
+    {
+      "name": "native-peer-three.json",
+      "sha256": "ee409dd849a78b4b86e6e34428ffd252d9865a9f0351982a3c46ec6c93141de7",
+      "memory_and_threads": [
+        "VmHWM:\t   15592 kB",
+        "VmRSS:\t   15592 kB",
+        "Threads:\t4"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "case": "capture/disabled",
+      "samples": 512,
+      "observed_p50_ns": [
+        0,
+        41,
+        41
+      ],
+      "observed_p95_ns": [
+        42,
+        42,
+        42
+      ],
+      "observed_p99_ns": [
+        42,
+        42,
+        42
+      ],
+      "p99_budget_ns": 2500,
+      "caller_allocations_budget": 0,
+      "caller_allocated_bytes_budget": 0
+    },
+    {
+      "case": "tracing/disabled",
+      "samples": 512,
+      "observed_p50_ns": [
+        41,
+        41,
+        42
+      ],
+      "observed_p95_ns": [
+        42,
+        42,
+        42
+      ],
+      "observed_p99_ns": [
+        42,
+        42,
+        42
+      ],
+      "p99_budget_ns": 2500,
+      "caller_allocations_budget": 0,
+      "caller_allocated_bytes_budget": 0
+    },
+    {
+      "case": "log/disabled",
+      "samples": 32,
+      "observed_p50_ns": [
+        41,
+        42,
+        41
+      ],
+      "observed_p95_ns": [
+        42,
+        83,
+        84
+      ],
+      "observed_p99_ns": [
+        417,
+        30000,
+        71542
+      ],
+      "p99_budget_ns": 287000,
+      "caller_allocations_budget": 0,
+      "caller_allocated_bytes_budget": 0
+    },
+    {
+      "case": "axum/disabled",
+      "samples": 64,
+      "observed_p50_ns": [
+        958,
+        1000,
+        958
+      ],
+      "observed_p95_ns": [
+        1000,
+        1042,
+        1291
+      ],
+      "observed_p99_ns": [
+        1500,
+        1833,
+        1958
+      ],
+      "p99_budget_ns": 8000,
+      "caller_allocations_budget": 1761,
+      "caller_allocated_bytes_budget": 172259
+    },
+    {
+      "case": "actix/disabled",
+      "samples": 64,
+      "observed_p50_ns": [
+        1500,
+        1500,
+        1459
+      ],
+      "observed_p95_ns": [
+        1584,
+        1708,
+        1584
+      ],
+      "observed_p99_ns": [
+        2458,
+        34667,
+        15125
+      ],
+      "p99_budget_ns": 139000,
+      "caller_allocations_budget": 1408,
+      "caller_allocated_bytes_budget": 66730
+    },
+    {
+      "case": "capture/baseline",
+      "samples": 512,
+      "observed_p50_ns": [
+        46792,
+        36459,
+        37375
+      ],
+      "observed_p95_ns": [
+        167375,
+        59458,
+        64583
+      ],
+      "observed_p99_ns": [
+        194833,
+        90167,
+        88708
+      ],
+      "p99_budget_ns": 780000,
+      "caller_allocations_budget": 470968,
+      "caller_allocated_bytes_budget": 19165194
+    },
+    {
+      "case": "tracing/baseline",
+      "samples": 512,
+      "observed_p50_ns": [
+        62708,
+        62375,
+        104583
+      ],
+      "observed_p95_ns": [
+        151958,
+        91459,
+        200917
+      ],
+      "observed_p99_ns": [
+        180292,
+        130083,
+        297750
+      ],
+      "p99_budget_ns": 1191000,
+      "caller_allocations_budget": 847677,
+      "caller_allocated_bytes_budget": 31876719
+    },
+    {
+      "case": "log/baseline",
+      "samples": 32,
+      "observed_p50_ns": [
+        55666,
+        57750,
+        49834
+      ],
+      "observed_p95_ns": [
+        78958,
+        70583,
+        65125
+      ],
+      "observed_p99_ns": [
+        82250,
+        76584,
+        67041
+      ],
+      "p99_budget_ns": 329000,
+      "caller_allocations_budget": 43306,
+      "caller_allocated_bytes_budget": 1565499
+    },
+    {
+      "case": "axum/baseline",
+      "samples": 64,
+      "observed_p50_ns": [
+        109500,
+        116417,
+        139250
+      ],
+      "observed_p95_ns": [
+        133083,
+        193958,
+        174375
+      ],
+      "observed_p99_ns": [
+        140792,
+        331708,
+        245500
+      ],
+      "p99_budget_ns": 1327000,
+      "caller_allocations_budget": 139011,
+      "caller_allocated_bytes_budget": 6001926
+    },
+    {
+      "case": "actix/baseline",
+      "samples": 64,
+      "observed_p50_ns": [
+        129667,
+        90375,
+        88000
+      ],
+      "observed_p95_ns": [
+        151875,
+        137667,
+        103916
+      ],
+      "observed_p99_ns": [
+        153209,
+        225625,
+        132166
+      ],
+      "p99_budget_ns": 903000,
+      "caller_allocations_budget": 139781,
+      "caller_allocated_bytes_budget": 5906867
+    },
+    {
+      "case": "capture/evidence",
+      "samples": 512,
+      "observed_p50_ns": [
+        69333,
+        71459,
+        79875
+      ],
+      "observed_p95_ns": [
+        105208,
+        99458,
+        208291
+      ],
+      "observed_p99_ns": [
+        137584,
+        161791,
+        263625
+      ],
+      "p99_budget_ns": 1055000,
+      "caller_allocations_budget": 986203,
+      "caller_allocated_bytes_budget": 41612744
+    },
+    {
+      "case": "tracing/evidence",
+      "samples": 512,
+      "observed_p50_ns": [
+        66917,
+        61458,
+        65750
+      ],
+      "observed_p95_ns": [
+        288167,
+        115292,
+        94000
+      ],
+      "observed_p99_ns": [
+        313791,
+        174042,
+        106542
+      ],
+      "p99_budget_ns": 1256000,
+      "caller_allocations_budget": 847653,
+      "caller_allocated_bytes_budget": 31867019
+    },
+    {
+      "case": "log/evidence",
+      "samples": 32,
+      "observed_p50_ns": [
+        75834,
+        48167,
+        55208
+      ],
+      "observed_p95_ns": [
+        82000,
+        57125,
+        74875
+      ],
+      "observed_p99_ns": [
+        83250,
+        67959,
+        99375
+      ],
+      "p99_budget_ns": 398000,
+      "caller_allocations_budget": 43296,
+      "caller_allocated_bytes_budget": 1565195
+    },
+    {
+      "case": "axum/evidence",
+      "samples": 64,
+      "observed_p50_ns": [
+        203916,
+        129167,
+        150750
+      ],
+      "observed_p95_ns": [
+        227458,
+        180709,
+        194625
+      ],
+      "observed_p99_ns": [
+        234584,
+        246458,
+        230542
+      ],
+      "p99_budget_ns": 986000,
+      "caller_allocations_budget": 203343,
+      "caller_allocated_bytes_budget": 8748538
+    },
+    {
+      "case": "actix/evidence",
+      "samples": 64,
+      "observed_p50_ns": [
+        187292,
+        131208,
+        141375
+      ],
+      "observed_p95_ns": [
+        276417,
+        200292,
+        212167
+      ],
+      "observed_p99_ns": [
+        282125,
+        244625,
+        531792
+      ],
+      "p99_budget_ns": 2128000,
+      "caller_allocations_budget": 204123,
+      "caller_allocated_bytes_budget": 8673169
+    },
+    {
+      "case": "pressure-hook/capture-and-lazy",
+      "samples": 512,
+      "observed_p50_ns": [
+        959,
+        458,
+        458
+      ],
+      "observed_p95_ns": [
+        1000,
+        542,
+        500
+      ],
+      "observed_p99_ns": [
+        1083,
+        1458,
+        542
+      ],
+      "p99_budget_ns": 6000,
+      "caller_allocations_budget": 7886,
+      "caller_allocated_bytes_budget": 121696
+    },
+    {
+      "case": "pressure-hook/tracing-and-log",
+      "samples": 512,
+      "observed_p50_ns": [
+        83,
+        42,
+        42
+      ],
+      "observed_p95_ns": [
+        84,
+        42,
+        42
+      ],
+      "observed_p99_ns": [
+        125,
+        42,
+        42
+      ],
+      "p99_budget_ns": 2500,
+      "caller_allocations_budget": 0,
+      "caller_allocated_bytes_budget": 0
+    },
+    {
+      "case": "pressure-transport/capture-and-lazy",
+      "samples": 512,
+      "observed_p50_ns": [
+        833,
+        458,
+        458
+      ],
+      "observed_p95_ns": [
+        875,
+        542,
+        459
+      ],
+      "observed_p99_ns": [
+        875,
+        625,
+        500
+      ],
+      "p99_budget_ns": 4000,
+      "caller_allocations_budget": 7886,
+      "caller_allocated_bytes_budget": 121696
+    },
+    {
+      "case": "pressure-transport/tracing-and-log",
+      "samples": 512,
+      "observed_p50_ns": [
+        83,
+        42,
+        42
+      ],
+      "observed_p95_ns": [
+        84,
+        42,
+        42
+      ],
+      "observed_p99_ns": [
+        84,
+        42,
+        42
+      ],
+      "p99_budget_ns": 2500,
+      "caller_allocations_budget": 0,
+      "caller_allocated_bytes_budget": 0
+    },
+    {
+      "case": "pressure-native-http/capture-and-lazy",
+      "samples": 512,
+      "observed_p50_ns": [
+        542,
+        458,
+        458
+      ],
+      "observed_p95_ns": [
+        584,
+        792,
+        584
+      ],
+      "observed_p99_ns": [
+        625,
+        2125,
+        667
+      ],
+      "p99_budget_ns": 9000,
+      "caller_allocations_budget": 7886,
+      "caller_allocated_bytes_budget": 121696
+    },
+    {
+      "case": "pressure-native-http/tracing-and-log",
+      "samples": 512,
+      "observed_p50_ns": [
+        42,
+        42,
+        42
+      ],
+      "observed_p95_ns": [
+        84,
+        42,
+        83
+      ],
+      "observed_p99_ns": [
+        84,
+        42,
+        84
+      ],
+      "p99_budget_ns": 2500,
+      "caller_allocations_budget": 0,
+      "caller_allocated_bytes_budget": 0
+    },
+    {
+      "case": "pressure/diagnostic-ledger",
+      "samples": 512,
+      "observed_p50_ns": [
+        44708,
+        51167,
+        47667
+      ],
+      "observed_p95_ns": [
+        63875,
+        75500,
+        60833
+      ],
+      "observed_p99_ns": [
+        89375,
+        87541,
+        70917
+      ],
+      "p99_budget_ns": 358000,
+      "caller_allocations_budget": 686563,
+      "caller_allocated_bytes_budget": 33249992
+    }
+  ]
+}

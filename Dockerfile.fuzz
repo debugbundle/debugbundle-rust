@@ -1,0 +1,5 @@
+FROM rust:1.99.1-bookworm@sha256:e6f2cff35d0f309acf8433b4f05878ed77092602c5065cc81801177da0bb3a9c
+RUN rustup toolchain install nightly-2026-11-12 --profile minimal
+RUN rustup component add rust-src --toolchain nightly-2026-11-12
+RUN cargo install cargo-fuzz --version 0.13.2 --locked
+WORKDIR /work

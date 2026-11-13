@@ -1,0 +1,121 @@
+<!doctype html><meta charset="utf-8"><title>Rust relay artifact qualification</title>
+<script src="/sdk.js"></script><script>
+(async () => {
+  const originalFetch = window.fetch.bind(window);
+  const exchanges = [];
+  let accessors = 0;
+  let causeAccessors = 0;
+  let hookCalls = 0;
+  const preparations = new Map();
+  window.fetch = async (input, init) => {
+    const response = await originalFetch(input, init);
+    if (String(input).includes("/debugbundle/browser")) {
+      exchanges.push({ credentials: init?.credentials ?? null, keepalive: init?.keepalive === true,
+        authorization: new Headers(init?.headers).get("authorization"),
+        request: JSON.parse(init.body), status: response.status,
+        response: await response.clone().json(),
+        corsCredentials: response.headers.get("access-control-allow-credentials") });
+    }
+    return response;
+  };
+  const sdk = DebugBundle.createDebugBundleBrowserSdk();
+  sdk.init({service:"artifact-browser",environment:"artifact-test",transportMode:"relay",
+    endpoint:"/debugbundle/browser",captureRecoveryObservations:true,
+    captureClicks:false,captureConsole:false,captureNetwork:false,flushInterval:60000,
+    analytics:{enabled:true,consentRequired:true,trackPageViews:false,trackRouteChanges:false,
+      trackSessions:false,trackReferrers:false,trackActions:false,trackFrictionSignals:false},
+    beforeSend(event){hookCalls++;preparations.get(event.payload?.message)?.();return event;}});
+  // Bootstrap has no assumed capability proof. The native relay's first ACK
+  // provides the descriptor used for the following graph and recovery records.
+  sdk.captureException(new Error("Legacy bootstrap"));
+  await sdk.flush();
+  const failureRef = crypto.randomUUID();
+  const attemptId = crypto.randomUUID();
+  sdk.captureException(new Error("Native outer password=SYNTHETIC_BROWSER_PASSWORD",
+    {cause:new TypeError("Native inner")}),{failureRef});
+  const opaque = {};
+  for (const key of ["name","message","stack","cause"]) {
+    Object.defineProperty(opaque,key,{get(){accessors++;throw new Error("unsafe getter");}});
+  }
+  sdk.captureException(opaque);
+  const unsafeCause = new Error("Native cause accessor withheld");
+  Object.defineProperty(unsafeCause,"cause",{get(){causeAccessors++;throw new Error("unsafe cause");}});
+  sdk.captureException(unsafeCause);
+  await sdk.flush();
+  sdk.captureRecovery({failureRef,attemptId,state:"attempt_completed",statusCode:200});
+  sdk.captureRecovery({failureRef,attemptId,state:"recovery_observed",operation:"retry"});
+  await sdk.flush();
+  sdk.analytics.setConsent(true);
+  sdk.analytics.marker("artifact.checkout",{status_bucket:2});
+  await sdk.flush();
+  sdk.analytics.setConsent(false);
+  const beacons = [];
+  document.cookie="session=SYNTHETIC_BROWSER_COOKIE; path=/";
+  window.lifecycleReceipt = {beacons,exchanges};
+  const nativeBeacon = navigator.sendBeacon.bind(navigator);
+  let declineBeacon = false;
+  navigator.sendBeacon = (url, body) => {
+    const accepted = declineBeacon ? false : nativeBeacon(url, body);
+    beacons.push({accepted,type:body.type,bytes:body.size,url:String(url)});
+    return accepted;
+  };
+  async function observed(message) {
+    const deadline = performance.now() + 5000;
+    while (performance.now() < deadline) {
+      const events = await (await originalFetch("/observed")).json();
+      if (events.some(event => event.payload?.message === message)) return;
+      await new Promise(resolve => setTimeout(resolve,10));
+    }
+    throw new Error(`Lifecycle transport was not observed upstream: ${message}`);
+  }
+  const lifecycleHookCounts = [];
+  async function lifecycle(message) {
+    let timer;
+    const prepared = new Promise((resolve,reject) => {
+      preparations.set(message,resolve);
+      timer=setTimeout(()=>reject(new Error("Deferred Browser preparation timed out")),5000);
+    });
+    sdk.captureException(new Error(message));
+    await prepared.finally(()=>clearTimeout(timer));
+    // Observe the published SDK's deferred hook instead of guessing when its
+    // timer fired. The continuation runs after that preparation callback ends.
+    const before = hookCalls;
+    window.dispatchEvent(new PageTransitionEvent("pagehide",{persisted:true}));
+    lifecycleHookCounts.push([before,hookCalls]);
+  }
+  // Dispatch keeps this fixture available to observe genuine native browser
+  // transports. It does not establish real-navigation/unload delivery.
+  await lifecycle("Native beacon lifecycle");
+  await observed("Native beacon lifecycle");
+  declineBeacon = true;
+  await lifecycle("Native keepalive lifecycle");
+  await observed("Native keepalive lifecycle");
+  await sdk.flush();
+  navigator.sendBeacon = nativeBeacon;
+  const backend = await originalFetch("/failure",{headers:{"X-DebugBundle-Trace-Id":"11111111-1111-4111-8111-111111111111"}});
+  const preflight = await originalFetch("/debugbundle/browser",{method:"OPTIONS"});
+  // A hostile page can send its own credentials and authority fields. The
+  // relay must still use only its server credential and protect canonical data.
+  document.cookie="session=SYNTHETIC_BROWSER_COOKIE; path=/";
+  const forged = structuredClone(exchanges[0].request);
+  forged.batch[0].event_id = crypto.randomUUID();
+  forged.batch[0].project_token="SYNTHETIC_BROWSER_FORGED_TOKEN";
+  forged.batch[0].organization_id="SYNTHETIC_BROWSER_ORGANIZATION";
+  const analytics = structuredClone(exchanges.find(exchange=>exchange.request.batch.some(event=>event.event_type==="analytics_event")).request.batch[0]);
+  analytics.event_id = crypto.randomUUID();
+  analytics.project_token="SYNTHETIC_BROWSER_FORGED_TOKEN";
+  forged.batch.push(analytics);
+  const hostile = await originalFetch("/debugbundle/browser?debugbundle_evidence=1",{
+    method:"POST",credentials:"same-origin",headers:{"content-type":"application/json",
+      authorization:"Bearer SYNTHETIC_BROWSER_WRONG_AUTH"},body:JSON.stringify(forged)});
+  const hostileBody = await hostile.json();
+  sdk.dispose();
+  await originalFetch("/done",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
+    finished:true,accessors,causeAccessors,failureRef,attemptId,exchanges,beacons,lifecycleHookCounts,backendStatus:backend.status,
+    backendTrace:backend.headers.get("x-debugbundle-trace-id"),preflightStatus:preflight.status,
+    preflightCredentials:preflight.headers.get("access-control-allow-credentials"),
+    hostileStatus:hostile.status,hostileBody})});
+})().catch(async error => {
+  await fetch("/done",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({error:String(error),lifecycle:window.lifecycleReceipt})});
+});
+</script>

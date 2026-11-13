@@ -1,0 +1,16 @@
+name: Feature request
+description: Describe a Rust integration or SDK capability needed by an application.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Application use case
+      description: Describe the runtime/framework, expected behaviour and current limitation.
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and evidence
+      description: Include relevant framework versions, existing DebugBundle SDK equivalents and synthetic examples.

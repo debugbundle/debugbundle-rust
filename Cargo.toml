@@ -1,0 +1,95 @@
+[package]
+name = "debugbundle"
+version = "1.0.0-alpha.1"
+edition = "2021"
+rust-version = "1.89"
+description = "Safe, bounded runtime error reporting for Rust, Axum and Actix Web"
+license = "Apache-2.0"
+repository = "https://github.com/debugbundle/debugbundle-rust"
+homepage = "https://debugbundle.com"
+documentation = "https://docs.rs/debugbundle"
+keywords = ["debugging", "errors", "observability", "axum", "actix-web"]
+categories = ["development-tools::debugging", "web-programming"]
+include = ["src/**", "build.rs", "tests/**", "examples/**", "README.md", "LICENSE", "CHANGELOG.md", "docs/**"]
+
+[features]
+default = ["http"]
+http = ["dep:reqwest"]
+local = ["dep:rustix", "dep:windows-sys"]
+tower = ["dep:tower", "dep:http", "dep:http-body"]
+axum = ["tower", "local", "http", "dep:axum"]
+actix-web = ["local", "http", "dep:actix-web", "dep:futures-util"]
+tracing = ["dep:tracing", "dep:tracing-subscriber"]
+log = ["dep:log"]
+testkit = []
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+getrandom = "0.4"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+regex = "1"
+url = "2"
+percent-encoding = "2"
+sha2 = "0.10"
+hmac = "0.12"
+base64 = "0.22"
+httpdate = "1"
+ryu-js = "1.0.3"
+jsonschema = { version = "0.61.2", default-features = false }
+tokio = { version = "1.53", features = ["rt", "sync", "time", "net", "macros"] }
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "json"], optional = true }
+tower = { version = "0.5.2", features = ["util"], optional = true }
+http = { version = "1", optional = true }
+http-body = { version = "1", optional = true }
+axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio", "matched-path", "json"], optional = true }
+actix-web = { version = "4.19.0", default-features = false, features = ["macros"], optional = true }
+futures-util = { version = "0.3", optional = true }
+tracing = { version = "0.1.44", optional = true }
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["registry", "std"], optional = true }
+log = { version = "0.4", features = ["std"], optional = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
+rustix = { version = "1.1.6", features = ["fs", "process"], optional = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_Security", "Win32_Security_Authorization", "Win32_System_Threading"], optional = true }
+
+[dev-dependencies]
+serde_json = { version = "1", features = ["arbitrary_precision"] }
+tempfile = "3"
+anyhow = "1"
+thiserror = "2"
+tokio = { version = "1.53", features = ["rt-multi-thread", "io-util", "test-util", "signal"] }
+http-body-util = "0.1"
+
+[package.metadata.docs.rs]
+all-features = true
+
+[lints.rust]
+# Only the private Windows OS boundary may use audited ABI calls; application
+# error inspection, capture and delivery remain unsafe-free.
+unsafe_code = "deny"
+
+[[example]]
+name = "local"
+required-features = ["local"]
+[[example]]
+name = "errors"
+required-features = ["local"]
+[[example]]
+name = "tokio"
+required-features = ["http"]
+[[example]]
+name = "tracing"
+required-features = ["local", "tracing"]
+[[example]]
+name = "tower"
+required-features = ["tower", "local"]
+[[example]]
+name = "axum"
+required-features = ["axum", "tracing"]
+[[example]]
+name = "actix"
+required-features = ["actix-web", "tracing"]

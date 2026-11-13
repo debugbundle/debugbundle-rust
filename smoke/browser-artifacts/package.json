@@ -1,0 +1,10 @@
+{
+  "name": "debugbundle-rust-browser-qualification",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@debugbundle/sdk-browser": "3.2.2",
+    "esbuild": "0.27.0"
+  }
+}

@@ -1,0 +1,206 @@
+name: SDK qualification
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    outputs:
+      candidate_sha256:
+        value: ${{ jobs.candidate.outputs.sha256 }}
+      candidate_version:
+        value: ${{ jobs.candidate.outputs.version }}
+permissions:
+  contents: read
+concurrency:
+  group: rust-sdk-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  CARGO_BUILD_JOBS: "1"
+  CARGO_INCREMENTAL: "0"
+  RUST_TEST_THREADS: "1"
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      sha256: ${{ steps.identity.outputs.sha256 }}
+      version: ${{ steps.identity.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
+      - name: Build one candidate for every exact-artifact lane
+        run: make package test-release-tools test-registry-tools workflows-check
+      - name: Record immutable candidate identity
+        id: identity
+        shell: python
+        run: |
+          import hashlib, os, re
+          from pathlib import Path
+          artifact, = Path('.tmp/packages').glob('*.crate')
+          match = re.fullmatch(r'debugbundle-(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)\.crate', artifact.name)
+          assert match, 'Invalid candidate filename'
+          digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'version={match[1]}\nsha256={digest}\n')
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: rust-candidate
+          path: .tmp/packages/
+          include-hidden-files: true
+          if-no-files-found: error
+  linux:
+    needs: candidate
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      DEBUGBUNDLE_CANDIDATE_ARTIFACT: /work/.tmp/selected/debugbundle-${{ needs.candidate.outputs.version }}.crate
+      DEBUGBUNDLE_CANDIDATE_SHA256: ${{ needs.candidate.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: rust-candidate
+          path: .tmp/selected/
+      - name: Previous stable, features, privacy and all functional suites
+        run: make verify test-core test-panic test-storage-faults
+      - name: Minimum compiler and current stable
+        run: make test-msrv test-current
+      - name: Windows-target local source and test compilation/lint under MSRV
+        run: make windows-typecheck windows-lint
+      - name: Extracted crate, native HTTP apps, full packaged tests and panic profiles
+        run: make smoke-package test-compatibility
+      - name: Keep exact candidate and qualification receipts
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: rust-crate-${{ matrix.runner }}
+          path: |
+            .tmp/packages/
+            .tmp/package-qualification/
+          include-hidden-files: true
+          if-no-files-found: error
+  coverage-security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
+      - name: Per-file production coverage, dependency/advisory/license policy
+        run: make coverage audit
+      - name: Keep coverage and dependency inventory
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: rust-coverage-security
+          path: |
+            .tmp/coverage/
+            .tmp/audit/
+          include-hidden-files: true
+          if-no-files-found: error
+  browser-resources:
+    needs: candidate
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    env:
+      DEBUGBUNDLE_CANDIDATE_ARTIFACT: /work/.tmp/selected/debugbundle-${{ needs.candidate.outputs.version }}.crate
+      DEBUGBUNDLE_CANDIDATE_SHA256: ${{ needs.candidate.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: rust-candidate
+          path: .tmp/selected/
+      - name: Published native Browser through both extracted Rust relay adapters
+        run: make test-browser-relays
+      - name: Instrumented capture, full queues and real native HTTP slow peer
+        run: make evidence-performance performance-check
+      - name: Keep browser and resource acceptance receipts
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: rust-browser-resources
+          path: |
+            .tmp/browser-qualification/
+            .tmp/performance/
+          include-hidden-files: true
+          if-no-files-found: error
+  bounded-fuzz:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
+      - name: Coverage-guided production-cfg wire, snapshot, relay and file boundaries
+        run: make audit-fuzz fuzz
+      - name: Keep bounded sanitizer receipts and reproductions
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: rust-bounded-fuzz
+          path: |
+            .tmp/fuzz/
+            fuzz/artifacts/
+          include-hidden-files: true
+          if-no-files-found: error
+  native:
+    needs: candidate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            target: test
+            python: python3
+          - runner: windows-2025
+            target: test
+            python: python
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: rust-candidate
+          path: .tmp/selected/
+      - name: Pin native CI compiler
+        run: rustup toolchain install 1.100.0 --profile minimal && rustup default 1.100.0
+      - name: Record native toolchain
+        run: rustc -vV && cargo --version
+      - name: All-feature compile and native runtime tests
+        run: ${{ matrix.python }} scripts/native-check.py typecheck && ${{ matrix.python }} scripts/native-check.py ${{ matrix.target }}
+      - name: Pin native coverage tools
+        run: rustup component add llvm-tools-preview && cargo install cargo-llvm-cov --version 0.9.1 --locked
+      - name: Native platform production-module executable-line coverage
+        run: ${{ matrix.python }} scripts/native-check.py coverage
+      - name: Native extracted-artifact full tests and framework applications
+        env:
+          CANDIDATE_VERSION: ${{ needs.candidate.outputs.version }}
+          CANDIDATE_SHA256: ${{ needs.candidate.outputs.sha256 }}
+        run: ${{ matrix.python }} scripts/native-package.py --artifact ".tmp/selected/debugbundle-$CANDIDATE_VERSION.crate" --expected-sha256 "$CANDIDATE_SHA256"
+      - name: Keep native coverage
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: rust-native-${{ matrix.runner }}
+          path: |
+            .tmp/coverage/
+            .tmp/native-package/
+          include-hidden-files: true
+          if-no-files-found: error
