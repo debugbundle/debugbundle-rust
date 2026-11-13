@@ -2,6 +2,77 @@ use super::*;
 use crate::runtime::{CallbackWorker, CLIENTS};
 use std::time::Duration;
 
+fn locked_file() -> (tempfile::NamedTempFile, File, File) {
+    let anchor = tempfile::NamedTempFile::new().unwrap();
+    let file = anchor.reopen().unwrap();
+    let witness = anchor.reopen().unwrap();
+    file.try_lock().unwrap();
+    assert!(matches!(
+        witness.try_lock(),
+        Err(std::fs::TryLockError::WouldBlock)
+    ));
+    (anchor, file, witness)
+}
+
+#[tokio::test]
+async fn file_cleanup_on_its_callback_lane_releases_the_lease_before_returning() {
+    assert!(crate::runtime::claim(&CLIENTS));
+    let slot = Arc::new(ClientSlot);
+    let worker = CallbackWorker::new(slot.clone()).unwrap();
+    let native = worker.native_cleanup();
+    let (_anchor, file, witness) = locked_file();
+    let reservation = Arc::new(FileReservation::default());
+    reservation.pending.store(true, Ordering::Release);
+    let released = reservation.released.notified();
+    tokio::pin!(released);
+    released.as_mut().enable();
+    let pending = reservation.clone();
+    worker
+        .call(move || {
+            assert!(crate::runtime::in_callback());
+            native.close(file, pending.clone(), slot);
+            assert!(!pending.pending.load(Ordering::Acquire));
+            witness.try_lock().unwrap();
+        })
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(2), released)
+        .await
+        .expect("inline native close must notify existing reservation waiters");
+}
+
+#[tokio::test]
+async fn disconnected_callback_lane_defers_file_close_and_releases_its_client_slot() {
+    assert!(crate::runtime::claim(&CLIENTS));
+    let slot = Arc::new(ClientSlot);
+    let weak_slot = Arc::downgrade(&slot);
+    let (sender, receiver) = mpsc::sync_channel(1);
+    drop(receiver);
+    let native = NativeCleanup {
+        sender,
+        capacity: Arc::new(tokio::sync::Notify::new()),
+    };
+    let (_anchor, file, witness) = locked_file();
+    let reservation = Arc::new(FileReservation::default());
+    reservation.pending.store(true, Ordering::Release);
+    let released = reservation.released.notified();
+    tokio::pin!(released);
+    released.as_mut().enable();
+    native.close(file, reservation.clone(), slot);
+    tokio::time::timeout(Duration::from_secs(2), released)
+        .await
+        .expect("disconnected native close must release its reservation");
+    assert!(!reservation.pending.load(Ordering::Acquire));
+    witness.try_lock().unwrap();
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while weak_slot.upgrade().is_some() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("fallback close must retain then release the client capacity permit");
+}
+
 #[tokio::test]
 async fn file_cleanup_waits_for_its_callback_lane_without_joining_stalled_app_cleanup() {
     assert!(crate::runtime::claim(&CLIENTS));
