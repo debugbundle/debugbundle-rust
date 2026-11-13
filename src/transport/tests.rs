@@ -48,6 +48,9 @@ fn server(leaf: &str, intermediate: bool, response: &'static str) -> (String, Jo
                 Err(_) => return Vec::new(),
             }
         };
+        // BSD/Windows can inherit the listener's nonblocking mode. The fixture
+        // uses blocking Rustls reads with socket deadlines on every platform.
+        socket.set_nonblocking(false).unwrap();
         socket
             .set_read_timeout(Some(Duration::from_secs(2)))
             .unwrap();
