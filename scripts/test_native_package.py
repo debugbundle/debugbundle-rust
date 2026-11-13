@@ -7,6 +7,7 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location("native_package", Path(__file__).with_name("native-package.py"))
 NATIVE = importlib.util.module_from_spec(SPEC)
@@ -36,6 +37,22 @@ class NativeArtifactTests(unittest.TestCase):
             for invalid in ("0" * 64, digest.upper(), "", digest + "\n", "../artifact"):
                 with self.subTest(expected=invalid), self.assertRaises(RuntimeError):
                     NATIVE.verify_digest(artifact, invalid)
+
+    def test_prepare_only_needs_no_writable_repository_output_or_host_rust(self):
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            artifact = self.artifact(directory)
+            repository = directory / "repository"
+            (repository / "scripts").mkdir(parents=True)
+            # A file makes output creation fail on every platform, even when
+            # tests run as root. Validation should write only owned OS scratch.
+            (repository / ".tmp").write_text("untouched")
+            argv = ["native-package.py", "--prepare-only", "--artifact", str(artifact),
+                    "--expected-sha256", NATIVE.verify_digest(artifact)]
+            with patch.object(NATIVE, "__file__", str(repository / "scripts/native-package.py")), \
+                    patch("sys.argv", argv), patch.object(NATIVE, "run", side_effect=AssertionError("host Rust invoked")):
+                NATIVE.main()
+            self.assertEqual((repository / ".tmp").read_text(), "untouched")
 
     def test_owned_regular_archive_extracts(self):
         with tempfile.TemporaryDirectory() as directory:

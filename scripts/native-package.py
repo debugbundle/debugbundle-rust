@@ -110,7 +110,8 @@ def main():
     scratch = str(Path(tempfile.gettempdir()).resolve())
     env.update(TMPDIR=scratch, TMP=scratch, TEMP=scratch)
     output = root / ".tmp/native-package"
-    output.mkdir(parents=True, exist_ok=True)
+    if not args.prepare_only:
+        output.mkdir(parents=True, exist_ok=True)
     artifact = args.artifact
     if artifact is None:
         if args.prepare_only:
