@@ -34,19 +34,39 @@ fn disk_full_short_writes_publish_no_arrays_and_retain_local_ownership_without_h
         endpoint: format!("http://{}/v1/events", trap.local_addr().unwrap()),
         allow_insecure_http: true,
         batch_size: 100,
+        max_buffered_events: 8,
         flush_interval: Duration::from_secs(300),
         ..Config::local("disk-fault", &root)
     });
-    for prefix in [
+    for (index, prefix) in [
         "Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "Hotel",
-    ] {
-        client.capture_log(
-            Level::Error,
-            &format!("{prefix} {}", "x".repeat(15000)),
-            &Context::default(),
-        );
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            client.capture_log(
+                Level::Error,
+                &format!("{prefix} {}", "x".repeat(15000)),
+                &Context::default(),
+            );
+            let owned = client.status().buffered_events;
+            if owned == index + 1 {
+                break;
+            }
+            assert_eq!(owned, index, "only this prefix may add pending ownership");
+            assert!(
+                Instant::now() < deadline,
+                "fault fixture seed never admitted"
+            );
+            std::thread::yield_now();
+        }
     }
+    // No timer/batch flush ran during seeding. All eight slots hold primaries;
+    // a contention summary cannot take a ninth slot during the failed flush.
     assert_eq!(client.status().buffered_events, 8);
+    assert!(client.status().buffered_bytes > 100000);
     let start = Instant::now();
     let outcome = client.flush(Duration::from_millis(100));
     assert!(!outcome.drained && outcome.timed_out);
