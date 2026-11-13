@@ -8,13 +8,52 @@ use std::{
         atomic::{AtomicUsize, Ordering},
         Arc, Mutex,
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 #[derive(Default)]
 pub struct Recorder {
     pub events: Mutex<Vec<Value>>,
     pub calls: AtomicUsize,
     pub failures: AtomicUsize,
+}
+impl Recorder {
+    // Contended capture can emit this canonical operational summary even when
+    // no requested primary/diagnostic was admitted. Keep every other event.
+    #[allow(dead_code)]
+    pub fn events_without_pressure(&self) -> Vec<Value> {
+        self.events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|event| {
+                !(event["event_type"] == "error_suppressed"
+                    && event["payload"]["reason"] == "queue_pressure")
+            })
+            .cloned()
+            .collect()
+    }
+}
+
+#[allow(dead_code)]
+pub fn emit_until(
+    client: &debugbundle::Client,
+    mut emit: impl FnMut(),
+    observed: impl Fn() -> bool,
+) -> usize {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut attempts = 0;
+    loop {
+        // Observe required records separately: draining does not reserve the
+        // state mutex for a subsequent nonblocking best-effort capture call.
+        emit();
+        attempts += 1;
+        assert!(client.flush(Duration::from_secs(2)).drained);
+        if observed() {
+            return attempts;
+        }
+        assert!(Instant::now() < deadline, "native record never admitted");
+        std::thread::yield_now();
+    }
 }
 impl Transport for Recorder {
     fn send(&self, body: &[u8], _: Duration) -> Result<TransportResponse, TransportFailure> {

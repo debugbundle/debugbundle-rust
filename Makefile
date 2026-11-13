@@ -46,6 +46,10 @@ test:
 .PHONY: test-core
 test-core:
 	$(CARGO) test --locked --no-default-features
+.PHONY: test-loggers
+test-loggers:
+	$(CARGO) test --locked --no-default-features --features log --test logging --test logging_install
+	$(CARGO) test --locked --no-default-features --features tracing --test logging
 test-contract:
 	$(CARGO) test --all-features --locked --test privacy --test evidence --test analytics_wire
 test-frameworks:
@@ -72,6 +76,7 @@ test-features:
 package:
 	$(CARGO) package --locked --allow-dirty
 	$(DOCKER_RUN) $(RUST_IMAGE) sh scripts/check-package-consumers.sh export
+	python3 scripts/native-package.py --prepare-only --artifact .tmp/packages/*.crate
 .PHONY: candidate smoke-package-lock smoke-package format-package-consumers compatibility-lock test-compatibility
 candidate:
 	@if [ -n "$$DEBUGBUNDLE_CANDIDATE_ARTIFACT" ]; then \
@@ -86,7 +91,7 @@ compatibility-lock: package
 test-compatibility: candidate
 	$(DOCKER_RUN) $(CANDIDATE_ENV) $(RUST_IMAGE) sh scripts/check-package-consumers.sh lower
 format-package-consumers: toolchain
-	$(DOCKER_RUN) $(TOOLS_IMAGE) rustfmt --edition 2021 smoke/package-consumers/support/src/lib.rs smoke/package-consumers/vanilla/src/main.rs smoke/package-consumers/axum-app/src/main.rs smoke/package-consumers/actix-app/src/main.rs smoke/package-consumers/browser-host/src/main.rs
+	$(DOCKER_RUN) $(TOOLS_IMAGE) rustfmt --edition 2021 smoke/package-consumers/support/src/lib.rs smoke/package-consumers/vanilla/src/main.rs smoke/package-consumers/axum-app/src/main.rs smoke/package-consumers/actix-app/src/main.rs smoke/package-consumers/browser-host/src/main.rs smoke/panic-profiles/src/main.rs
 verify: format-check lint typecheck test test-features package
 
 # Bootstrap resolution is explicit; subsequent commands use the frozen lockfile.

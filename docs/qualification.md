@@ -5,7 +5,7 @@ establish native macOS, Windows or Linux x64 acceptance. The public repository
 exists; no source commit, push, registry publication or consumer adoption is
 implied by these commands.
 
-`make verify test-core test-panic test-msrv test-current coverage audit` owns the
+`make verify test-core test-loggers test-panic test-msrv test-current coverage audit` owns the
 source gates. Coverage measures executable lines in every production module for
 the actual target, requires every compiled source record, and fails below 80
 percent per file. Linux excludes the two Windows-only modules; native Windows
@@ -13,6 +13,17 @@ coverage includes those and excludes the Unix-only implementation. Neither targe
 can establish coverage of the other platform's OS calls.
 Test helpers are excluded. This stable LLVM lane does not establish branch or
 function coverage. Dependency policy has no advisory suppressions.
+
+`test-loggers` executes the native fixtures with `log` and `tracing` independently,
+without default HTTP features. Fixtures observe best-effort admission with a finite
+deadline, retain exact application-sink counts per attempt and separate canonical
+operational pressure summaries from the requested records.
+
+`make package` exports and validates the actual archive before accepting it as a
+candidate. Anchored includes retain Rust source, canonical fixtures and documented
+examples while excluding unrelated development files. The portable extraction
+guard rejects unexpected inventory, hidden files, dependency trees, unsafe paths,
+links, devices and aliases before copying. Its adverse fixtures run without Rust.
 
 `make smoke-package` runs the complete packaged functional suite, then independent
 vanilla, Axum and genuinely non-Send Actix TCP applications against an extracted

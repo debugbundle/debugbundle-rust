@@ -15,10 +15,14 @@ replica-aware application stores.
 
 Private storage has descriptor-relative Unix operations and a narrow Windows
 Win32 boundary with private DACLs, pinned ancestors and reparse refusal. Windows
-source cross-compiles under Rust 1.89; native runtime/coverage remains unqualified.
+source cross-compiles under Rust 1.89. Native acceptance is recorded per exact
+candidate; cross-compilation alone does not establish runtime/coverage safety.
 Composed snapshots preserve causes/aggregate children, unsafe limitations and
 honest UTF-8/graph truncation. Full queues skip lazy producers even while native
 HTTP is stalled and the callback lane is free.
+
+Candidate archives retain only the approved source, fixtures and documentation;
+local dependencies and hidden metadata are excluded and rejected before extraction.
 
 Local Linux qualification includes exact-crate consumers, real Core ingestion and
 local CLI processing, published Browser-to-both-Rust-relay checks, per-file line

@@ -64,6 +64,19 @@ def prepare(artifact, destination):
         for path in paths:
             if any(paths.get(path[:length]) is False for length in range(1, len(path))):
                 raise RuntimeError("candidate file is an ancestor of another member")
+        root_files = {"Cargo.toml", "Cargo.toml.orig", "Cargo.lock", ".cargo_vcs_info.json",
+                      "build.rs", "LICENSE", "README.md", "CHANGELOG.md"}
+        for member in members:
+            relative = member.name.rstrip("/").split("/")[1:]
+            name = "/".join(relative)
+            if name in root_files and member.isfile():
+                continue
+            if any(part.startswith(".") or part in {"node_modules", "target"} for part in relative):
+                raise RuntimeError(f"unexpected package member: {member.name}")
+            allowed = (not relative or relative[0] in {"src", "tests", "examples", "docs"}) if member.isdir() else bool(
+                re.fullmatch(r"(?:src|tests|examples)/.+\.rs|tests/fixtures/[^/]+\.(?:json|sha256)|examples/README\.md|docs/.+\.md", name))
+            if not allowed:
+                raise RuntimeError(f"unexpected package member: {member.name}")
         # Copy only validated regular files/directories into a new owned temp
         # root. Do not restore archive permissions, links, devices or owner data.
         for member in members:

@@ -70,7 +70,7 @@ jobs:
           name: rust-candidate
           path: .tmp/selected/
       - name: Previous stable, features, privacy and all functional suites
-        run: make verify test-core test-panic test-storage-faults
+        run: make verify test-core test-loggers test-panic test-storage-faults
       - name: Minimum compiler and current stable
         run: make test-msrv test-current
       - name: Windows-target local source and test compilation/lint under MSRV

@@ -10,7 +10,7 @@ homepage = "https://debugbundle.com"
 documentation = "https://docs.rs/debugbundle"
 keywords = ["debugging", "errors", "observability", "axum", "actix-web"]
 categories = ["development-tools::debugging", "web-programming"]
-include = ["src/**", "build.rs", "tests/**", "examples/**", "README.md", "LICENSE", "CHANGELOG.md", "docs/**"]
+include = ["/src/**/*.rs", "/build.rs", "/tests/**/*.rs", "/tests/fixtures/*.json", "/tests/fixtures/*.sha256", "/examples/**/*.rs", "/examples/README.md", "/README.md", "/LICENSE", "/CHANGELOG.md", "/docs/**/*.md"]
 
 [features]
 default = ["http"]

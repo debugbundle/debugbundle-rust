@@ -110,8 +110,14 @@ if grep -F 'file:///work' "$output/panic-metadata.json" >/dev/null; then
     echo "Panic consumer resolves back to the source checkout" >&2
     exit 1
 fi
-timeout 600 cargo run --manifest-path "$qualification_root/panic/Cargo.toml" --locked --offline -- unwind > "$output/panic-unwind.log" 2>&1
-timeout 600 cargo build --manifest-path "$qualification_root/panic/Cargo.toml" --locked --offline --profile abort > "$output/panic-abort-build.log" 2>&1
+if ! timeout 600 cargo run --manifest-path "$qualification_root/panic/Cargo.toml" --locked --offline -- unwind > "$output/panic-unwind.log" 2>&1; then
+    cat "$output/panic-unwind.log"
+    exit 1
+fi
+if ! timeout 600 cargo build --manifest-path "$qualification_root/panic/Cargo.toml" --locked --offline --profile abort > "$output/panic-abort-build.log" 2>&1; then
+    cat "$output/panic-abort-build.log"
+    exit 1
+fi
 set +e
 "$CARGO_TARGET_DIR/abort/debugbundle-panic-profile-smoke" abort > "$output/panic-abort.stdout" 2> "$output/panic-abort.stderr"
 panic_status=$?

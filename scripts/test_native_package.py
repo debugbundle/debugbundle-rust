@@ -40,9 +40,26 @@ class NativeArtifactTests(unittest.TestCase):
     def test_owned_regular_archive_extracts(self):
         with tempfile.TemporaryDirectory() as directory:
             directory = Path(directory)
-            extracted = NATIVE.prepare(self.artifact(directory), directory / "output")
+            paths = ("src/lib.rs", "src/storage/mod.rs", "tests/helpers/mod.rs",
+                     "tests/fixtures/privacy-conformance.json", "tests/fixtures/privacy-conformance.sha256",
+                     "examples/local.rs", "examples/README.md", "docs/guides/nested.md")
+            members = [tarfile.TarInfo(ROOT + "/" + path) for path in paths]
+            extracted = NATIVE.prepare(self.artifact(directory, members), directory / "output")
             self.assertEqual(extracted, directory / "output" / ROOT)
             self.assertEqual((extracted / "README.md").read_bytes(), b"ok")
+            self.assertTrue(all((extracted / path).is_file() for path in paths))
+
+    def test_development_files_are_rejected_before_copy(self):
+        for path in ("smoke/browser-artifacts/node_modules/example/README.md",
+                     "smoke/browser-artifacts/node_modules/example/LICENSE",
+                     "src/.DS_Store", "src/.private.rs", "src/token.pem",
+                     "src/node_modules/generated.rs", "docs/.cache/README.md"):
+            with self.subTest(path=path), tempfile.TemporaryDirectory() as directory:
+                directory = Path(directory)
+                member = tarfile.TarInfo(ROOT + "/" + path)
+                with self.assertRaisesRegex(RuntimeError, "unexpected package member"):
+                    NATIVE.prepare(self.artifact(directory, [member]), directory / "output")
+                self.assertFalse((directory / "output").exists())
 
     def test_negative_member_lengths_are_rejected_before_advancing_the_reader(self):
         with tempfile.TemporaryDirectory() as directory:

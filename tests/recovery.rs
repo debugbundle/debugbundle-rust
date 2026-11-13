@@ -2,7 +2,7 @@ mod helpers;
 use debugbundle::{
     Client, Context, ExceptionSnapshot, OperationOptions, RecoveryObservation, RecoveryState,
 };
-use helpers::{configured, Recorder};
+use helpers::{configured, emit_until, Recorder};
 use serde_json::json;
 use std::{sync::Arc, time::Duration};
 const FAILURE: &str = "11111111-1111-4111-8111-111111111111";
@@ -32,11 +32,33 @@ fn recovery_is_explicit_and_uses_the_owned_failure_scope() {
     let client = client(recorder.clone());
     let operation = client.start_operation(OperationOptions::default());
     let context = operation.context().with_failure_ref(FAILURE);
-    client.capture_exception(&ExceptionSnapshot::new("Failure", "failed"), &context);
-    client.capture_recovery(&observation(RecoveryState::AttemptCompleted), &context);
-    client.capture_recovery(&observation(RecoveryState::RecoveryObserved), &context);
+    emit_until(
+        &client,
+        || client.capture_exception(&ExceptionSnapshot::new("Failure", "failed"), &context),
+        || {
+            recorder
+                .events_without_pressure()
+                .iter()
+                .any(|event| event["event_type"] == "backend_exception")
+        },
+    );
+    for (state, expected) in [
+        (RecoveryState::AttemptCompleted, "attempt_completed"),
+        (RecoveryState::RecoveryObserved, "recovery_observed"),
+    ] {
+        emit_until(
+            &client,
+            || client.capture_recovery(&observation(state), &context),
+            || {
+                recorder
+                    .events_without_pressure()
+                    .iter()
+                    .any(|event| event["payload"]["state"] == expected)
+            },
+        );
+    }
     assert!(client.flush(Duration::from_secs(2)).drained);
-    let events = recorder.events.lock().unwrap();
+    let events = recorder.events_without_pressure();
     assert_eq!(events.len(), 3);
     let failure = events
         .iter()
@@ -74,7 +96,7 @@ fn recovery_is_off_without_local_opt_in_or_proof_and_stale_owners_cannot_admit()
             &operation.context(),
         );
         assert!(client.flush(Duration::from_secs(1)).drained);
-        assert!(recorder.events.lock().unwrap().is_empty());
+        assert!(recorder.events_without_pressure().is_empty());
     }
     let recorder = Arc::new(Recorder::default());
     let client = client(recorder.clone());
@@ -87,7 +109,7 @@ fn recovery_is_off_without_local_opt_in_or_proof_and_stale_owners_cannot_admit()
         &Context::default(),
     );
     assert!(client.flush(Duration::from_secs(1)).drained);
-    assert!(recorder.events.lock().unwrap().is_empty());
+    assert!(recorder.events_without_pressure().is_empty());
 }
 
 #[test]
@@ -210,12 +232,18 @@ fn valid_hook_identity_replacements_preserve_diagnostic_ownership() {
     }));
     let client = Client::new(config);
     let operation = client.start_operation(OperationOptions::default());
-    client.capture_recovery(
-        &observation(RecoveryState::AttemptStarted),
-        &operation.context(),
+    emit_until(
+        &client,
+        || {
+            client.capture_recovery(
+                &observation(RecoveryState::AttemptStarted),
+                &operation.context(),
+            )
+        },
+        || recorder.events_without_pressure().len() == 1,
     );
     assert!(client.flush(Duration::from_secs(2)).drained);
-    let events = recorder.events.lock().unwrap();
+    let events = recorder.events_without_pressure();
     assert_eq!(events.len(), 1);
     assert_eq!(
         events[0]["event_id"],

@@ -2,6 +2,8 @@
 
 The SDK is an unpublished candidate. Preparing these files does not publish,
 commit or push it. Release and consumer adoption require separate instructions.
+The owner has placed releases on hold pending a deep audit. Passing qualification
+does not lift that hold or authorise publication.
 
 `SDK qualification` builds one immutable `rust-candidate` artifact, records its
 SHA-256 and passes those bytes to Linux x64/arm64, native macOS/Windows and the

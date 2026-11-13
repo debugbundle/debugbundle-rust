@@ -1,7 +1,11 @@
 #![cfg(any(feature = "tracing", feature = "log"))]
 mod helpers;
-use debugbundle::{Client, Context, Level};
-use helpers::{configured, Recorder};
+use debugbundle::Client;
+#[cfg(feature = "tracing")]
+use debugbundle::{Context, Level};
+use helpers::{configured, emit_until, Recorder};
+#[cfg(feature = "tracing")]
+use std::time::Instant;
 use std::{
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -9,6 +13,17 @@ use std::{
     },
     time::Duration,
 };
+
+#[cfg(feature = "tracing")]
+fn fill_single_event_queue(client: &Client) {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while client.status().buffered_events == 0 {
+        client.capture_log(Level::Error, "primary", &Context::default());
+        assert!(Instant::now() < deadline);
+        std::thread::yield_now();
+    }
+}
+
 static FORMATTERS: AtomicUsize = AtomicUsize::new(0);
 struct UnsafeValue;
 impl std::fmt::Debug for UnsafeValue {
@@ -49,18 +64,39 @@ fn tracing_filters_only_its_layer_and_never_formats_opaque_fields() {
     let subscriber = Registry::default()
         .with(Other(other.clone()))
         .with(client.tracing_layer());
-    tracing::subscriber::with_default(subscriber, || {
+    let attempts = tracing::subscriber::with_default(subscriber, || {
         tracing::info!(message="info remains in the app sink",unsafe_value=?UnsafeValue);
-        tracing::warn!(message="password=SYNTHETIC_SECRET",technical_count=3u64,opaque=?UnsafeValue);
-        tracing::error!(
-            message = "native error",
-            error = &UnsafeValue as &(dyn std::error::Error + 'static)
+        let warnings = emit_until(
+            &client,
+            || tracing::warn!(message="password=SYNTHETIC_SECRET",technical_count=3u64,opaque=?UnsafeValue),
+            || {
+                recorder
+                    .events_without_pressure()
+                    .iter()
+                    .any(|event| event["event_type"] == "log_event")
+            },
         );
+        let errors = emit_until(
+            &client,
+            || {
+                tracing::error!(
+                    message = "native error",
+                    error = &UnsafeValue as &(dyn std::error::Error + 'static)
+                )
+            },
+            || {
+                recorder
+                    .events_without_pressure()
+                    .iter()
+                    .any(|event| event["event_type"] == "backend_exception")
+            },
+        );
+        1 + warnings + errors
     });
     assert!(client.flush(Duration::from_secs(2)).drained);
     assert_eq!(FORMATTERS.load(Ordering::SeqCst), 0);
-    assert_eq!(other.load(Ordering::SeqCst), 3);
-    let events = recorder.events.lock().unwrap();
+    assert_eq!(other.load(Ordering::SeqCst), attempts);
+    let events = recorder.events_without_pressure();
     assert_eq!(events.len(), 2);
     assert_eq!(
         events
@@ -99,22 +135,43 @@ fn log_tee_preserves_existing_sink_and_dynamic_arguments_are_not_evaluated() {
             .args(format_args!("info"))
             .build(),
     );
-    logger.log(
-        &log::Record::builder()
-            .level(log::Level::Error)
-            .args(format_args!("literal"))
-            .build(),
+    let literal = emit_until(
+        &client,
+        || {
+            logger.log(
+                &log::Record::builder()
+                    .level(log::Level::Error)
+                    .args(format_args!("literal"))
+                    .build(),
+            )
+        },
+        || {
+            recorder
+                .events_without_pressure()
+                .iter()
+                .any(|event| event["payload"]["message"] == "literal")
+        },
     );
-    logger.log(
-        &log::Record::builder()
-            .level(log::Level::Error)
-            .args(format_args!("{UnsafeValue}"))
-            .build(),
+    let dynamic = emit_until(
+        &client,
+        || {
+            logger.log(
+                &log::Record::builder()
+                    .level(log::Level::Error)
+                    .args(format_args!("{UnsafeValue}"))
+                    .build(),
+            )
+        },
+        || {
+            recorder.events_without_pressure().iter().any(|event| {
+                event["payload"]["message"] == "Log message unavailable without formatting"
+            })
+        },
     );
     assert!(client.flush(Duration::from_secs(2)).drained);
     assert_eq!(FORMATTERS.load(Ordering::SeqCst), 0);
-    assert_eq!(other.load(Ordering::SeqCst), 3);
-    let events = recorder.events.lock().unwrap();
+    assert_eq!(other.load(Ordering::SeqCst), 1 + literal + dynamic);
+    let events = recorder.events_without_pressure();
     assert_eq!(events.len(), 2);
     assert_eq!(events[0]["payload"]["message"], "literal");
     assert_eq!(
@@ -131,7 +188,7 @@ fn detach_stops_only_sdk_logging_and_full_error_queues_skip_field_visits() {
     let mut config = configured(recorder.clone());
     config.max_buffered_events = 1;
     let client = Client::new(config);
-    client.capture_log(Level::Error, "primary", &Context::default());
+    fill_single_event_queue(&client);
     let subscriber = tracing_subscriber::registry().with(client.tracing_layer());
     tracing::subscriber::with_default(subscriber, || {
         tracing::error!(message="overloaded",opaque=?UnsafeValue);
@@ -142,13 +199,15 @@ fn detach_stops_only_sdk_logging_and_full_error_queues_skip_field_visits() {
     assert_eq!(FORMATTERS.load(Ordering::SeqCst), 0);
     assert_eq!(
         recorder
-            .events
-            .lock()
-            .unwrap()
+            .events_without_pressure()
             .iter()
             .filter(|event| event["event_type"] == "log_event")
             .count(),
         1
+    );
+    assert_eq!(
+        recorder.events_without_pressure()[0]["payload"]["message"],
+        "primary"
     );
 }
 
@@ -164,13 +223,31 @@ fn span_metadata_is_protected_updated_and_released_on_close() {
         span.record("stage", "complete");
         {
             let _entered = span.enter();
-            tracing::error!(message = "inside");
+            emit_until(
+                &client,
+                || tracing::error!(message = "inside"),
+                || {
+                    recorder
+                        .events_without_pressure()
+                        .iter()
+                        .any(|event| event["payload"]["message"] == "inside")
+                },
+            );
         }
         drop(span);
-        tracing::error!(message = "outside");
+        emit_until(
+            &client,
+            || tracing::error!(message = "outside"),
+            || {
+                recorder
+                    .events_without_pressure()
+                    .iter()
+                    .any(|event| event["payload"]["message"] == "outside")
+            },
+        );
     });
     assert!(client.flush(Duration::from_secs(2)).drained);
-    let events = recorder.events.lock().unwrap();
+    let events = recorder.events_without_pressure();
     assert_eq!(events.len(), 2);
     assert_eq!(
         events[0]["context"]["logging"]["spans"][0]["name"],
@@ -205,15 +282,31 @@ fn exact_occurrences_pair_only_after_admission_in_the_same_operation() {
     let owner = client.start_operation(Default::default());
     let context = owner.context();
     tracing::subscriber::with_default(subscriber, || {
-        client.with_error_log(&occurrence, &context, || {
-            tracing::error!(message = "checkout failed")
-        })
+        emit_until(
+            &client,
+            || {
+                client.with_error_log(&occurrence, &context, || {
+                    tracing::error!(message = "checkout failed")
+                })
+            },
+            || recorder.events_without_pressure().len() == 1,
+        )
     });
     client.capture_occurrence(&occurrence, &context);
-    let independent = client.start_operation(Default::default());
-    client.capture_occurrence(&occurrence, &independent.context());
     assert!(client.flush(Duration::from_secs(2)).drained);
-    let events = recorder.events.lock().unwrap();
+    assert_eq!(
+        recorder.events_without_pressure().len(),
+        1,
+        "same-operation capture must stay paired"
+    );
+    let independent = client.start_operation(Default::default());
+    emit_until(
+        &client,
+        || client.capture_occurrence(&occurrence, &independent.context()),
+        || recorder.events_without_pressure().len() == 2,
+    );
+    assert!(client.flush(Duration::from_secs(2)).drained);
+    let events = recorder.events_without_pressure();
     assert_eq!(events.len(), 2);
     assert!(events
         .iter()
@@ -253,31 +346,40 @@ fn deferred_hooks_and_failed_logger_admission_cannot_suppress_the_only_capture()
             client.detach_logging();
         }
         tracing::subscriber::with_default(subscriber, || {
-            client.with_error_log(&occurrence, &context, || {
-                tracing::error!(message = "failed")
-            })
+            let emit = || {
+                client.with_error_log(&occurrence, &context, || {
+                    tracing::error!(message = "failed")
+                })
+            };
+            if failed {
+                emit();
+            } else {
+                emit_until(&client, emit, || hooks.load(Ordering::SeqCst) == 1);
+                assert!(
+                    recorder.events_without_pressure().is_empty(),
+                    "the first hook must drop its logger event"
+                );
+            }
         });
-        client.capture_occurrence(&occurrence, &context);
+        emit_until(
+            &client,
+            || client.capture_occurrence(&occurrence, &context),
+            || recorder.events_without_pressure().len() == 1,
+        );
         assert!(client.flush(Duration::from_secs(2)).drained);
-        assert_eq!(recorder.events.lock().unwrap().len(), 1);
+        assert_eq!(recorder.events_without_pressure().len(), 1);
     }
 }
 
 #[cfg(feature = "tracing")]
 #[test]
 fn tracing_rechecks_the_same_callsite_after_queue_recovery_and_detach() {
-    use std::time::Instant;
     use tracing_subscriber::layer::SubscriberExt;
     let recorder = Arc::new(Recorder::default());
     let mut config = configured(recorder.clone());
     config.max_buffered_events = 1;
     let client = Client::new(config);
-    let deadline = Instant::now() + Duration::from_secs(2);
-    while client.status().buffered_events == 0 {
-        client.capture_log(Level::Error, "fill", &Context::default());
-        assert!(Instant::now() < deadline);
-        std::thread::yield_now();
-    }
+    fill_single_event_queue(&client);
     let subscriber = tracing_subscriber::registry().with(client.tracing_layer());
     tracing::subscriber::with_default(subscriber, || {
         let emit = || tracing::error!(message = "dynamic callsite");
