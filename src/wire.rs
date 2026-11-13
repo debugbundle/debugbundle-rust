@@ -260,7 +260,13 @@ pub(crate) fn valid_graph(graph: &Value) -> bool {
     let Some(nodes) = graph["nodes"].as_array() else {
         return false;
     };
-    if nodes.is_empty() || nodes.len() > 8 || canonical_size(graph).is_none_or(|n| n > 32768) {
+    // A snapshot is retained under this field in the shared evidence object.
+    // Reserve its JSON wrapper too; a graph just below 32 KiB can otherwise
+    // pass composition but fail the final event's identical evidence budget.
+    if nodes.is_empty()
+        || nodes.len() > 8
+        || canonical_size(graph).is_none_or(|n| n > 32768 - b"{\"exception_evidence\":}".len())
+    {
         return false;
     }
     let mut indexed = HashMap::new();

@@ -116,6 +116,10 @@ so production security checks remain active. The long-lived SDK runtime makes
 process-exit leak detection unsuitable, so this lane disables that oracle and
 retains the separate ownership/cardinality/cleanup tests. It is not exhaustive
 fuzzing or a formal concurrency model. Native-platform file/relay and exact-artifact checks are CI gates for every candidate. Deep audit fixes must pass them before a later, separately approved release.
+Retained snapshot regressions are also seeded into every fuzz campaign. Their
+ordinary tests check each composition step, including the serialized JSON field
+wrapper within the shared evidence budget; the original failing input remains
+reproducible independently of future mutations.
 
 ## TLS handshake coverage
 

@@ -56,6 +56,10 @@ fuzz_target!(|data: &[u8]| {
         };
         let mut event = BASE.clone();
         event["payload"]["exception_evidence"] = snapshot.evidence().clone();
-        assert!(debugbundle::wire::valid_event(&event));
+        assert!(
+            debugbundle::wire::valid_event(&event),
+            "snapshot graph bytes: {:?}",
+            debugbundle::wire::canonical_size(snapshot.evidence())
+        );
     }
 });

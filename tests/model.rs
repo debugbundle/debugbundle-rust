@@ -318,3 +318,48 @@ fn public_bootstrap_and_correlation_helpers_preserve_opaque_valid_identifiers() 
     assert_eq!(client.status().buffered_events, 0);
     assert_eq!(uuid::Uuid::parse_str(&id).unwrap().get_version_num(), 4);
 }
+
+#[test]
+fn mutated_snapshot_sequences_preserve_canonical_evidence() {
+    let corpus: Value =
+        serde_json::from_str(include_str!("fixtures/snapshot-regressions.json")).unwrap();
+    let base: Value =
+        serde_json::from_str(include_str!("fixtures/evidence-wire-cases.json")).unwrap();
+    for input in corpus["inputs"].as_array().unwrap() {
+        let bytes: Vec<u8> = serde_json::from_value(input.clone()).unwrap();
+        let text = String::from_utf8_lossy(&bytes);
+        // Retain the fuzz target's type-name width: changing it moves this
+        // control-character-heavy graph away from the serialized byte boundary.
+        let child = ExceptionSnapshot::new(
+            "snapshots::Opaque",
+            "Error details unavailable without a safe snapshot",
+        )
+        .with_stack(&text, TraceOrigin::RuntimeReported);
+        let mut snapshot = ExceptionSnapshot::new(&text, &text);
+        for (step, byte) in bytes.iter().take(16).enumerate() {
+            snapshot = match byte % 4 {
+                0 => snapshot.with_cause(&child),
+                1 => snapshot.with_aggregate(std::slice::from_ref(&child)),
+                2 => ExceptionSnapshot::new("Outer", &text).with_cause(&snapshot),
+                _ => snapshot.with_frames(
+                    &vec![
+                        debugbundle::FrameSnapshot {
+                            function: Some(text.to_string()),
+                            ..Default::default()
+                        };
+                        usize::from(*byte) % 40
+                    ],
+                    TraceOrigin::RuntimeReported,
+                ),
+            };
+            let mut event = base["events"][0]["event"].clone();
+            event["payload"]["exception_evidence"] = snapshot.evidence().clone();
+            assert!(
+                debugbundle::wire::valid_event(&event),
+                "step {step}: graph bytes {:?}, evidence {}",
+                debugbundle::wire::canonical_size(snapshot.evidence()),
+                snapshot.evidence()
+            );
+        }
+    }
+}

@@ -37,6 +37,8 @@ for case in relay["cases"]:
             seed("relay", bytes([mode]) + data)
 for data in (b"", b"\x00", bytes(range(256)), b"012301230123", b"password=SYNTHETIC_SECRET", "Ω stack\n 0: worker::run\n at src/main.rs:42:7".encode()):
     seed("snapshots", data)
+for data in json.loads((root / "tests/fixtures/snapshot-regressions.json").read_text())["inputs"]:
+    seed("snapshots", bytes(data))
 for data in (b"rust-service", b"../escape", b"/absolute", b"..", b"CON", b"name:stream", b"a\x00b", "COM¹".encode(), b"x"*256):
     seed("files", data)
 print("Prepared contract seeds for wire, snapshot, relay and private-file targets")
