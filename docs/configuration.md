@@ -64,3 +64,8 @@ HTTP uses explicit Rustls verification and requests identity-encoded responses.
 Automatic gzip/Brotli/deflate/zstd response decompression is disabled on the SDK
 client even when another dependency enables reqwest compression features;
 compressed responses fail closed before JSON or indexed-ACK processing.
+
+Construct the client during application bootstrap. Setup is synchronous, including
+release of custom values in a rejected configuration. Destructor unwinds are
+contained independently; application code that blocks or aborts is not sandboxed.
+See [runtime boundaries](runtime-and-api.md#client-and-capture).

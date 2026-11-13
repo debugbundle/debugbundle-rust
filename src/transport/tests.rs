@@ -62,8 +62,20 @@ fn server(leaf: &str, intermediate: bool, response: &'static str) -> (String, Jo
                 Ok(0) | Err(_) => return request,
                 Ok(size) => request.extend_from_slice(&buffer[..size]),
             }
-            if request.windows(4).any(|bytes| bytes == b"\r\n\r\n") {
+            if let Some(end) = request.windows(4).position(|bytes| bytes == b"\r\n\r\n") {
+                let headers = std::str::from_utf8(&request[..end]).unwrap();
+                let body_bytes = headers
+                    .lines()
+                    .filter_map(|line| line.split_once(':'))
+                    .find(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+                    .map_or(0, |(_, value)| value.trim().parse::<usize>().unwrap());
+                // TCP/TLS record boundaries need not align with HTTP framing.
+                // Closing with unread request bytes can reset a native socket.
+                if request.len() < (end + 4).saturating_add(body_bytes) {
+                    continue;
+                }
                 let _ = tls.write_all(response.as_bytes());
+                tls.conn.send_close_notify();
                 let _ = tls.flush();
                 return request;
             }
@@ -89,6 +101,21 @@ fn trusted(endpoint: &str) -> HttpTransport {
 
 const ACCEPTED: &str = "HTTP/1.1 202 Accepted\r\nContent-Type: application/json\r\nContent-Length: 39\r\nConnection: close\r\n\r\n{\"accepted\":1,\"rejected\":0,\"errors\":[]}";
 
+async fn require_success(result: Result<Reply, TransportError>) -> Reply {
+    if let Ok(reply) = result {
+        return reply;
+    }
+    // A failed synthetic native handshake needs its platform trust diagnostic;
+    // the public SDK intentionally exposes no raw network error or credentials.
+    let (endpoint, worker) = server("server", true, ACCEPTED);
+    let diagnostic = trusted(&endpoint).client.get(endpoint).send().await;
+    let _ = worker.join();
+    panic!(
+        "synthetic TLS request failed; direct fixture diagnostic: {:?}",
+        diagnostic.map_err(reqwest::Error::without_url)
+    );
+}
+
 #[tokio::test]
 async fn verified_tls_chain_delivers_authenticated_event_and_config_requests() {
     for config_request in [false, true] {
@@ -100,8 +127,8 @@ async fn verified_tls_chain_delivers_authenticated_event_and_config_requests() {
                 .await
         } else {
             transport.send(br#"{"events":[{}]}"#.to_vec()).await
-        }
-        .unwrap();
+        };
+        let reply = require_success(reply).await;
         assert_eq!(reply.status, 202);
         assert_eq!(reply.body["accepted"], 1);
         let request = String::from_utf8(worker.join().unwrap())
@@ -162,10 +189,8 @@ async fn tls_rejects_wrong_hostname_missing_intermediate_and_expired_leaf_before
 #[tokio::test]
 async fn tls_redirects_never_forward_credentials() {
     let (endpoint, worker) = server("server", true, "HTTP/1.1 307 Temporary Redirect\r\nLocation: http://127.0.0.1:9/forbidden\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}");
-    let response = trusted(&endpoint)
-        .send(br#"{"events":[]}"#.to_vec())
-        .await
-        .unwrap();
+    let response = trusted(&endpoint).send(br#"{"events":[]}"#.to_vec()).await;
+    let response = require_success(response).await;
     assert_eq!(response.status, 307);
     assert!(!worker.join().unwrap().is_empty());
 }

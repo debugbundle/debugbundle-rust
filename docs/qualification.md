@@ -137,3 +137,9 @@ response while the SDK rejects it for both ingestion and configuration. This
 protects the response-size/encoding boundary from Cargo feature unification.
 `make audit-test-lock` resolves added test-only dependencies; routine gates use
 `--locked`. Test dependencies do not enter a normal core-only consumer graph.
+
+TLS fixtures use a one-year leaf and a longer-lived intermediate/root. Regenerate
+with `make tls-fixtures` before the leaf expires; never relax certificate checks
+to keep a fixture passing. The leaf follows [Apple's TLS certificate validity
+requirements](https://support.apple.com/en-us/103769). The synthetic server drains
+the complete HTTP request and sends TLS close-notify before releasing its socket.

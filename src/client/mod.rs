@@ -183,9 +183,15 @@ impl Client {
             .unwrap_or_default()
     }
     pub fn new(mut config: Config) -> Self {
-        let inactive = |reason| Self {
-            inner: None,
-            reason: Some(reason),
+        let inactive = |config, reason| {
+            // Construction is an explicit synchronous bootstrap operation.
+            // Rejection owns no worker permit, so contain application destructor
+            // unwinds here instead of leaking values or spawning unbounded work.
+            runtime::discard_configuration(config);
+            Self {
+                inner: None,
+                reason: Some(reason),
+            }
         };
         let proof_valid = if let Some(raw) = config.evidence_capabilities.take() {
             let descriptor = crate::wire::descriptor(&crate::wire::capabilities(&raw));
@@ -197,23 +203,23 @@ impl Client {
             true
         };
         if !config.enabled {
-            return inactive("disabled");
+            return inactive(config, "disabled");
         }
         if !proof_valid || config.validate().is_err() {
-            return inactive("invalid_configuration");
+            return inactive(config, "invalid_configuration");
         }
         let Some(privacy) = Privacy::new(&config.redact_fields) else {
-            return inactive("invalid_privacy");
+            return inactive(config, "invalid_privacy");
         };
         if !crate::wire::prepare() || runtime::handle().is_none() {
-            return inactive("runtime_unavailable");
+            return inactive(config, "runtime_unavailable");
         }
         if !runtime::claim(&runtime::CLIENTS) {
-            return inactive("client_limit");
+            return inactive(config, "client_limit");
         }
         let slot = Arc::new(runtime::ClientSlot);
         let Some(callbacks) = CallbackWorker::new(slot.clone()) else {
-            return inactive("callback_limit");
+            return inactive(config, "callback_limit");
         };
         #[cfg(feature = "http")]
         let http = if config.project_mode == ProjectMode::Connected && config.transport.is_none() {
@@ -232,7 +238,7 @@ impl Client {
             && config.transport.is_none()
             && http.is_none()
         {
-            return inactive("transport_unavailable");
+            return inactive(config, "transport_unavailable");
         }
         let features = config
             .evidence_capabilities

@@ -15,8 +15,9 @@ keyUsage=critical,keyCertSign,cRLSign
 subjectKeyIdentifier=hash
 authorityKeyIdentifier=keyid,issuer
 EOF
+# Keep each issuer valid for longer than its child, including native Windows checks.
 openssl x509 -req -in intermediate.csr -CA root.pem -CAkey root.key -set_serial 2 \
-  -days 3650 -extfile intermediate.ext -out intermediate.pem 2>/dev/null
+  -days 3285 -extfile intermediate.ext -out intermediate.pem 2>/dev/null
 openssl req -new -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -keyout server.key \
   -out server.csr -subj '/CN=localhost' 2>/dev/null
 cat > leaf.ext <<'EOF'
@@ -27,8 +28,10 @@ subjectAltName=DNS:localhost
 subjectKeyIdentifier=hash
 authorityKeyIdentifier=keyid,issuer
 EOF
+# Apple validates private TLS leaf lifetimes too (maximum 825 days).
+# Use a one-year leaf; regenerate this test-only fixture before it expires.
 openssl x509 -req -in server.csr -CA intermediate.pem -CAkey intermediate.key -set_serial 3 \
-  -days 3650 -extfile leaf.ext -out server.pem 2>/dev/null
+  -days 365 -extfile leaf.ext -out server.pem 2>/dev/null
 touch index
 printf '04\n' > serial
 cat > ca.cnf <<'EOF'

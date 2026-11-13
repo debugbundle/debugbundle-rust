@@ -75,20 +75,31 @@ fn dispose<T>(value: T) {
         discard_panic(payload);
     }
 }
-pub(crate) fn defer_configuration(mut config: crate::Config, slot: Arc<ClientSlot>) {
-    enqueue_cleanup(
-        Box::new(move || {
-            let hook = config.before_send.take();
-            let transport = config.transport.take();
-            #[cfg(feature = "local")]
-            let limiter = config.relay_rate_limit_store.take();
-            dispose(hook);
-            dispose(transport);
-            #[cfg(feature = "local")]
-            dispose(limiter);
-        }),
-        slot,
-    );
+struct InternalGuard(bool);
+impl Drop for InternalGuard {
+    fn drop(&mut self) {
+        INTERNAL.with(|flag| flag.set(self.0));
+    }
+}
+pub(crate) fn discard_configuration(mut config: crate::Config) {
+    let _guard = InternalGuard(INTERNAL.with(|flag| flag.replace(true)));
+    // Take every application-owned value before dropping any of them. Separate
+    // unwind boundaries prevent two panicking destructors from double-panicking
+    // during Config's automatic field cleanup.
+    let hook = config.before_send.take();
+    let transport = config.transport.take();
+    #[cfg(feature = "local")]
+    let limiter = config.relay_rate_limit_store.take();
+    if let Some(proof) = config.evidence_capabilities.take() {
+        crate::owned_json::discard(proof);
+    }
+    dispose(hook);
+    dispose(transport);
+    #[cfg(feature = "local")]
+    dispose(limiter);
+}
+pub(crate) fn defer_configuration(config: crate::Config, slot: Arc<ClientSlot>) {
+    enqueue_cleanup(Box::new(move || discard_configuration(config)), slot);
 }
 pub(crate) async fn cleanup_value<T: Send + 'static>(value: T, slot: Arc<ClientSlot>) {
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -262,9 +273,10 @@ impl CallbackWorker {
     }
 }
 fn discard_panic(mut payload: Box<dyn std::any::Any + Send>) {
-    // Run application destructors only on this already-bounded callback worker.
-    // A destructor that repeatedly panics occupies this slot, not a caller or
-    // replacement thread, and no opaque payload is retained in a telemetry queue.
+    // Worker callbacks/cleanup keep disposal on their already-bounded worker;
+    // rejected configuration stays in the explicit synchronous bootstrap call.
+    // Repeated destructor panics occupy that same thread, never a replacement,
+    // and no opaque payload is retained in a telemetry queue.
     loop {
         payload = match payload.downcast::<serde_json::Value>() {
             Ok(value) => {

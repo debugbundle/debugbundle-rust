@@ -11,6 +11,16 @@ This SDK remains unpublished. Its baseline source and extracted-crate matrix pas
 `Config::local(service, directory)` selects local-only file output and requires
 the `local` feature. A local-only client rejects a custom network transport.
 
+Construct clients once during application bootstrap. `Client::new` / `init` are
+synchronous setup operations: runtime/TLS initialization and disposal of rejected
+configuration values happen before they return. Rejected configuration releases
+custom hooks, transports and limiter stores behind separate unwind boundaries,
+so a destructor panic does not escape or double-panic across SDK-owned fields.
+Application destructors that block or abort cannot be time-bounded or sandboxed;
+keep these setup calls out of request/capture paths. Rejection does not create
+replacement workers or retain an unbounded overflow queue. Successful-client
+cleanup continues on the existing bounded cleanup worker.
+
 `capture_exception` / `capture_error` accept a borrowed `ExceptionSnapshot` or
 `ExceptionInput::borrowed(&error)`. Explicit snapshots provide protected names,
 messages, supplied stacks, causes, aggregate children and `with_frames` structured

@@ -33,5 +33,9 @@ bounded public privacy-key matching, explicit Rustls and disabled automatic
 response decompression even when an application enables reqwest compression.
 Real certificate-chain, hostname, expiry, redirect and stalled-handshake tests
 plus a feature-unified gzip regression run with the packaged test suite.
+Rejected or capacity-exhausted configuration now disposes application hooks,
+transports and limiter stores through separate unwind boundaries, preventing an
+initialization failure from escaping or double-panicking across SDK fields.
+Synchronous bootstrap limits remain explicit; admitted-client cleanup is deferred.
 The audit candidate requires fresh qualification; publication remains on hold.
 No package publication or consumer adoption is implied.

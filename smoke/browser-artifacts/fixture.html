@@ -47,7 +47,15 @@
   await sdk.flush();
   sdk.analytics.setConsent(true);
   sdk.analytics.marker("artifact.checkout",{status_bucket:2});
-  await sdk.flush();
+  // Analytics capture can still be waiting for deferred initialization. A flush
+  // is not an admission receipt; withdrawing consent now would correctly purge
+  // that pending marker. Observe its real relay ACK before withdrawing consent.
+  const analyticsDeadline = performance.now() + 5000;
+  while (!exchanges.some(exchange=>exchange.request.batch.some(event=>event.event_type==="analytics_event"))) {
+    await sdk.flush();
+    if (performance.now() >= analyticsDeadline) throw new Error("Opted-in analytics marker was not acknowledged by the relay");
+    await new Promise(resolve=>setTimeout(resolve,10));
+  }
   sdk.analytics.setConsent(false);
   const beacons = [];
   document.cookie="session=SYNTHETIC_BROWSER_COOKIE; path=/";
@@ -101,7 +109,7 @@
   forged.batch[0].event_id = crypto.randomUUID();
   forged.batch[0].project_token="SYNTHETIC_BROWSER_FORGED_TOKEN";
   forged.batch[0].organization_id="SYNTHETIC_BROWSER_ORGANIZATION";
-  const analytics = structuredClone(exchanges.find(exchange=>exchange.request.batch.some(event=>event.event_type==="analytics_event")).request.batch[0]);
+  const analytics = structuredClone(exchanges.flatMap(exchange=>exchange.request.batch).find(event=>event.event_type==="analytics_event"));
   analytics.event_id = crypto.randomUUID();
   analytics.project_token="SYNTHETIC_BROWSER_FORGED_TOKEN";
   forged.batch.push(analytics);
