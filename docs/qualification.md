@@ -1,6 +1,8 @@
 # Candidate qualification
 
-This is an unpublished SDK candidate. The public source baseline `244c104` passed [all eight CI jobs](https://github.com/debugbundle/debugbundle-rust/actions/runs/43406799897), including Linux x64/arm64, native macOS/Windows and consumers of one immutable crate. Audit changes require a fresh run and artifact seal. Running local Linux tests alone never establishes other platforms, registry publication or consumer adoption.
+This is an unpublished SDK candidate. Every source change requires a fresh [eight-job CI run](https://github.com/debugbundle/debugbundle-rust/actions/workflows/ci.yml) and artifact seal, including Linux x64/arm64, native macOS/Windows and consumers of one immutable crate. Match the commit and checksum in that run before relying on its acceptance. Running local Linux tests alone never establishes other platforms, registry publication or consumer adoption.
+
+Historical baseline `244c104` passed [all eight jobs](https://github.com/debugbundle/debugbundle-rust/actions/runs/43406799897). It does not qualify later audit changes.
 
 `make verify test-core test-loggers test-panic test-msrv test-current coverage audit` owns the
 source gates. Coverage measures executable lines in every production module for

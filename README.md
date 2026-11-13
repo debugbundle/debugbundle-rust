@@ -2,7 +2,7 @@
 
 Safe, bounded runtime error reporting for vanilla Rust, Tokio, Axum and Actix Web.
 
-This SDK is an unpublished candidate under deep audit. The baseline source and exact-crate CI matrix passed on Linux x64/arm64, macOS and Windows. Audit fixes require a fresh candidate. See [qualification](docs/qualification.md) for evidence and the separate release gates.
+This SDK is an unpublished release candidate. Every candidate must pass the source and exact-crate CI matrix on Linux x64/arm64, macOS and Windows. See [qualification](docs/qualification.md) and the [same-commit CI run](https://github.com/debugbundle/debugbundle-rust/actions/workflows/ci.yml) for evidence and the separate release gates.
 
 No crates.io release is available from this work. `make package` prepares a local
 candidate; `make smoke-package` tests its extracted contents in isolated vanilla,
@@ -10,7 +10,7 @@ Axum and Actix applications. Registry ownership and publication are separate gat
 
 ## First local event
 
-Use the extracted local candidate in an application while qualification continues:
+Use the extracted local candidate in an isolated evaluation application:
 
 ```toml
 [dependencies]
