@@ -82,6 +82,11 @@ Callback-returned JSON is checked before schema traversal and discarded iterativ
 when rejected, so excessively deep owned values cannot trigger recursive JSON
 destruction. Unknown oversized hook replacements are withheld; bounded invalid
 replacements retain the safe-original fallback.
+Optional exception evidence, execution/resource metadata and its typed reference
+share a 32 KiB serialized budget. If they exceed it, optional data yields before
+the primary is discarded. Owner-hook message changes remain in force; a budget
+limit never restores the previous message. Reduction records bounded evidence
+limit markers and removes the typed reference with its omitted evidence.
 Worker isolation bounds scheduling; it does not sandbox application code or make
 a callback's process abort recoverable. A pending lazy producer remains charged
 until its owned reference has been disposed on the cleanup worker, including when

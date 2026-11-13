@@ -25,6 +25,9 @@ honest UTF-8/graph truncation. Full queues skip lazy producers even while native
 HTTP is stalled and the callback lane is free.
 Snapshot composition reserves the serialized evidence field wrapper inside the
 shared 32 KiB budget, including escaped control-character-heavy frame data.
+Combined evidence limits reduce optional metadata before discarding a valid
+primary or restoring content removed by an owner hook. Receive validation stays
+strict; malformed bounded replacements retain their existing fallback behaviour.
 
 Candidate archives retain only the approved source, fixtures and documentation;
 local dependencies and hidden metadata are excluded and rejected before extraction.

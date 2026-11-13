@@ -16,6 +16,7 @@ fuzz_target!(|data: &[u8]| {
     let _ = wire::valid_reference(&input);
     let _ = wire::capabilities(&input);
     let _ = wire::canonical_size(&input);
+    let _ = wire::protect_event(&PRIVACY, &input);
     let count = input["count"]
         .as_u64()
         .map(|value| value.min(101) as usize)

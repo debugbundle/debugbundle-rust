@@ -53,20 +53,8 @@ pub(crate) fn valid_shape(event: &Value) -> bool {
     }) {
         return false;
     }
-    let mut additions = Map::new();
-    for key in ["exception_evidence", "execution", "resource_observations"] {
-        if let Some(value) = p.get(key) {
-            additions.insert(key.into(), value.clone());
-        }
-    }
-    if !additions.is_empty() {
-        let reference = &event["context"]["evidence_reference"];
-        if valid_reference(reference) {
-            additions.insert("evidence_reference".into(), reference.clone());
-        }
-        if canonical_size(&Value::Object(additions)).is_none_or(|n| n > 32768) {
-            return false;
-        }
+    if !evidence_within_budget(event) {
+        return false;
     }
     if event["event_type"] == "diagnostic_context" {
         if !v4(&p["failure_ref"]) || !valid_scope(&p["scope"]) {
@@ -437,6 +425,37 @@ pub fn canonical_size(value: &Value) -> Option<usize> {
     }
     preflight(value).then(|| size(value, 0)).flatten()
 }
+
+fn evidence_within_budget(event: &Value) -> bool {
+    fn add(remaining: &mut usize, key: &str, value: &Value, separator: bool) -> bool {
+        // These fixed ASCII field names need quotes, a colon and an optional
+        // comma. Borrow values instead of cloning a combined evidence object.
+        let Some(bytes) = canonical_size(value)
+            .and_then(|size| size.checked_add(key.len() + 3 + usize::from(separator)))
+        else {
+            return false;
+        };
+        let Some(rest) = remaining.checked_sub(bytes) else {
+            return false;
+        };
+        *remaining = rest;
+        true
+    }
+    let mut remaining = 32768 - 2; // The enclosing object braces are part of the budget.
+    let mut present = false;
+    for key in ["exception_evidence", "execution", "resource_observations"] {
+        if let Some(value) = event["payload"].get(key) {
+            if !add(&mut remaining, key, value, present) {
+                return false;
+            }
+            present = true;
+        }
+    }
+    let reference = &event["context"]["evidence_reference"];
+    !present
+        || !valid_reference(reference)
+        || add(&mut remaining, "evidence_reference", reference, true)
+}
 pub fn capabilities(value: &Value) -> Vec<String> {
     parse_capabilities(value).unwrap_or_default()
 }
@@ -533,6 +552,11 @@ pub fn protect_event(privacy: &crate::privacy::Privacy, event: &Value) -> Option
     if let Some(root) = output.as_object_mut() {
         root.remove("project_token");
     }
+    // Optional evidence must also yield at its combined semantic byte limit,
+    // including any expansion caused by mandatory privacy protection.
+    if !evidence_within_budget(&output) {
+        output = without_optional(&output)?;
+    }
     valid_event(&output).then_some(output)
 }
 
@@ -544,7 +568,9 @@ pub(crate) fn hook_replacement(
     original: Value,
 ) -> Option<Value> {
     let output = {
-        let view = if preflight(&replacement) {
+        // A shared evidence-budget failure is not a malformed owner envelope.
+        // Reduce its optional data before validation can restore the original.
+        let view = if preflight(&replacement) && evidence_within_budget(&replacement) {
             Some(std::borrow::Cow::Borrowed(&replacement))
         } else {
             without_optional(&replacement).map(std::borrow::Cow::Owned)
