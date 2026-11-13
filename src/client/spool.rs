@@ -1,4 +1,6 @@
 //! One bounded disk replay loop per client; file work stays on its existing worker.
+#[cfg(test)]
+mod tests;
 use super::{response, sender, Client, Inner};
 use crate::{
     config::ProjectMode,
@@ -177,29 +179,46 @@ async fn forward(inner: &Arc<Inner>, mut work: Work) -> bool {
     completed
 }
 async fn persist(inner: &Arc<Inner>, work: &mut Work) -> bool {
-    let directory = inner.config.spool_dir.clone();
-    let record = work.record.clone();
-    let previous = work.metadata.clone();
-    match tokio::time::timeout(
-        inner.config.request_timeout,
-        inner
-            .callbacks
-            .call(move || Store::open(&directory)?.update(&record, &previous)),
-    )
-    .await
-    {
-        Ok(Ok(Ok(bytes))) => {
-            work.metadata = bytes;
-            true
+    // Keep this one bounded record and lease until its progress is durable.
+    // Releasing it after queue pressure or an uncertain write would let the next
+    // scan resend indices whose canonical ACK is already known in this process.
+    loop {
+        let stopped = inner.stop.notified();
+        tokio::pin!(stopped);
+        stopped.as_mut().enable();
+        if inner.stopped.load(Ordering::Acquire) {
+            return false;
         }
-        _ => {
-            if let Ok(mut status) = inner.spool_status.lock() {
-                status.ready = false;
-                status.storage_failures = status.storage_failures.saturating_add(1);
+        let directory = inner.config.spool_dir.clone();
+        let record = work.record.clone();
+        let previous = work.metadata.clone();
+        let attempted = tokio::select! {
+            _ = stopped => return false,
+            result = tokio::time::timeout(
+                inner.config.request_timeout,
+                inner.callbacks.persist_native(move || Store::open(&directory)?.update(&record, &previous)),
+            ) => result,
+        };
+        match attempted {
+            Ok(Ok(Ok(bytes))) => {
+                work.metadata = bytes;
+                return true;
             }
-            inner.changed.notify_waiters();
-            false
+            _ => {
+                if let Ok(mut status) = inner.spool_status.lock() {
+                    status.ready = false;
+                    status.storage_failures = status.storage_failures.saturating_add(1);
+                }
+                inner.changed.notify_waiters();
+            }
         }
+        let stopped = inner.stop.notified();
+        tokio::pin!(stopped);
+        stopped.as_mut().enable();
+        if inner.stopped.load(Ordering::Acquire) {
+            return false;
+        }
+        tokio::select! { _ = stopped => return false, _ = tokio::time::sleep(Duration::from_secs(1)) => {} }
     }
 }
 async fn forward_body(inner: &Arc<Inner>, work: &mut Work) -> bool {

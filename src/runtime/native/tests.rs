@@ -15,6 +15,25 @@ fn locked_file() -> (tempfile::NamedTempFile, File, File) {
 }
 
 #[tokio::test]
+async fn native_persistence_never_runs_on_a_poisoned_or_disconnected_lane() {
+    for poisoned in [true, false] {
+        let (sender, receiver) = mpsc::sync_channel(1);
+        drop(receiver);
+        let worker = CallbackWorker {
+            sender,
+            poisoned: Arc::new(AtomicBool::new(poisoned)),
+            capacity: Arc::new(tokio::sync::Notify::new()),
+        };
+        assert!(matches!(
+            worker
+                .persist_native(|| panic!("unavailable lane executed native work"))
+                .await,
+            Err(CallbackFailure::Unavailable)
+        ));
+    }
+}
+
+#[tokio::test]
 async fn file_cleanup_on_its_callback_lane_releases_the_lease_before_returning() {
     assert!(crate::runtime::claim(&CLIENTS));
     let slot = Arc::new(ClientSlot);

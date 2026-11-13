@@ -61,6 +61,8 @@ for (const framework of ["axum","actix"]) {
         assert(exchange.response.evidence_capabilities.features.includes("exception_evidence_v1"));
     }
     const events = result.events;
+    assert.equal(new Set(events.map(event=>event.event_id)).size,events.length,
+      "healthy upstream must not receive ACKed IDs again during relay callback contention");
     const backend = events.find(event=>event.event_type==="backend_exception");
     assert.equal(backend.correlation.trace_id,page.backendTrace);
     assert.equal(backend.service.framework,framework==="axum"?"axum":"actix-web");

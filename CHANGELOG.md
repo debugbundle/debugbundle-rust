@@ -12,6 +12,9 @@ behaviour. Browser relay factories provide protected canonical ingress, origin
 validation, bounded uploads, local/forwarded delivery and an authenticated durable
 spool with per-index ACK progress. A client-owned shared limiter interface supports
 replica-aware application stores.
+Known relay acknowledgements retain their bounded record/file lease through
+callback pressure and persistence failures. Exact progress/completion retries are
+idempotent after lost callback results; shutdown remains finite.
 
 Private storage has descriptor-relative Unix operations and a narrow Windows
 Win32 boundary with private DACLs, pinned ancestors and reparse refusal. Windows

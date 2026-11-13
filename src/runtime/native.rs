@@ -1,5 +1,5 @@
-//! Native file cleanup uses the owning callback lane, isolated from app destructors.
-use super::{ClientSlot, Job};
+//! Native persistence and file cleanup reuse the owning bounded callback lane.
+use super::{CallbackFailure, CallbackWorker, ClientSlot, Job};
 use std::{
     fs::File,
     sync::{
@@ -19,6 +19,35 @@ mod tests;
 pub(crate) struct NativeCleanup {
     pub(super) sender: mpsc::SyncSender<Job>,
     pub(super) capacity: Arc<tokio::sync::Notify>,
+}
+impl CallbackWorker {
+    /// Only the single spool owner waits for SDK-owned ACK persistence. Capture
+    /// and application callbacks retain their nonblocking queue admission.
+    pub(crate) async fn persist_native<T: Send + 'static>(
+        &self,
+        work: impl FnOnce() -> T + Send + 'static,
+    ) -> Result<T, CallbackFailure> {
+        let (mut job, rx) = self.job(work);
+        loop {
+            let ready = self.capacity.notified();
+            tokio::pin!(ready);
+            ready.as_mut().enable();
+            if self.poisoned.load(Ordering::Acquire) {
+                return Err(CallbackFailure::Unavailable);
+            }
+            match self.sender.try_send(job) {
+                Ok(()) => break,
+                Err(mpsc::TrySendError::Full(returned)) => {
+                    job = returned;
+                    ready.await;
+                }
+                Err(mpsc::TrySendError::Disconnected(_)) => {
+                    return Err(CallbackFailure::Unavailable);
+                }
+            }
+        }
+        rx.await.unwrap_or(Err(CallbackFailure::Unavailable))
+    }
 }
 struct PendingFile {
     file: Option<File>,

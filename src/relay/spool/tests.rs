@@ -120,3 +120,19 @@ fn metadata_updates_preserve_original_proof_and_index_count() {
     record.acknowledged_digests.push(None);
     assert!(store.update(&record, &raw).is_err());
 }
+
+#[test]
+fn exact_ack_progress_and_completion_retries_survive_a_lost_callback_result() {
+    let root = tempfile::tempdir().unwrap();
+    let store = Store::open(&root.path().join("spool")).unwrap();
+    let (mut record, previous) = retained(&store, 1_000_000);
+    record.states[0] = Disposition::Accepted;
+    record.acknowledged_digests[0] = Some("a".repeat(64));
+    let accepted = store.update(&record, &previous).unwrap();
+    assert_eq!(store.update(&record, &previous).unwrap(), accepted);
+    record.completed_at = Some(1_000_001);
+    let completed = store.update(&record, &accepted).unwrap();
+    assert_eq!(store.update(&record, &accepted).unwrap(), completed);
+    record.completed_at = Some(1_000_002);
+    assert!(store.update(&record, &accepted).is_err());
+}

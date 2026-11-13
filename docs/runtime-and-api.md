@@ -401,6 +401,11 @@ legacy custom transports. Partial ACKs retain only retryable indices; accepted
 indices and their sent-event digests cannot be changed or retried. A record gains
 `.delivered` only after all indices are canonically accepted. Terminal records
 remain visible as pending until retention, rather than producing a delivery claim.
+Known ACK progress keeps the same bounded record and file lease while callback
+capacity or storage is unavailable. Persistence retries never resend those indices;
+an identical write whose callback result was lost is idempotent. One stalled
+persistence operation pauses that client's replay, without adding workers or
+blocking request handlers. Flush and shutdown retain their finite deadlines.
 
 `relay.status()` reports scan readiness, pending/delivered records and storage
 failures for the current scope. `relay.flush_async(timeout).await` waits for
@@ -410,7 +415,7 @@ Pending records expire after seven days from local admission; delivered records
 remain for 24 hours from canonical completion. A private directory is bounded to
 1,000 physical files and 100 MiB, including metadata/headroom. Corrupt, forged,
 foreign or replaced files fail closed and cannot manufacture receipts. Native Linux, macOS and Windows source/extracted-crate tests cover restart, partial ACK, credential rotation and retention. Registry consumers remain a separate post-publication check.
-Network acceptance followed by a crash before ACK persistence may replay an ID;
+Network acceptance followed by a crash or shutdown before ACK persistence may replay an ID;
 this is at-least-once delivery, with canonical event IDs preserved for deduplication.
 
 ## Wire and local output

@@ -248,6 +248,19 @@ impl CallbackWorker {
         if self.poisoned.load(Ordering::Acquire) {
             return Err(CallbackFailure::Unavailable);
         }
+        let (job, rx) = self.job(work);
+        self.sender
+            .try_send(job)
+            .map_err(|_| CallbackFailure::Unavailable)?;
+        rx.await.unwrap_or(Err(CallbackFailure::Unavailable))
+    }
+    fn job<T: Send + 'static>(
+        &self,
+        work: impl FnOnce() -> T + Send + 'static,
+    ) -> (
+        Job,
+        tokio::sync::oneshot::Receiver<Result<T, CallbackFailure>>,
+    ) {
         let (tx, rx) = tokio::sync::oneshot::channel();
         let poisoned = self.poisoned.clone();
         let job = Box::new(move || {
@@ -266,10 +279,7 @@ impl CallbackWorker {
             };
             let _ = tx.send(value);
         });
-        self.sender
-            .try_send(job)
-            .map_err(|_| CallbackFailure::Unavailable)?;
-        rx.await.unwrap_or(Err(CallbackFailure::Unavailable))
+        (job, rx)
     }
 }
 fn discard_panic(mut payload: Box<dyn std::any::Any + Send>) {

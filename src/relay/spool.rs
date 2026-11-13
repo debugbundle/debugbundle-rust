@@ -471,28 +471,42 @@ impl Store {
             return Err(invalid());
         }
         let body = self.encode(record)?;
+        // A timed-out callback may have committed before its result was lost.
+        // Retrying the exact authenticated progress is idempotent; a different
+        // current record must still pass the normal compare-and-replace checks.
+        if record.completed_at.is_none()
+            && self
+                .directory
+                .read(&state_name(&record.file))
+                .ok()
+                .as_deref()
+                == Some(body.as_slice())
+        {
+            return Ok(body);
+        }
         if record.completed_at.is_some() {
             let name = delivered_name(&record.file);
             match self.directory.write_named(&name, &body) {
                 Ok(_) => {}
                 Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
                     let current = self.directory.read(&name)?;
-                    let done = self.decode(&current)?;
-                    if done.file != record.file
-                        || done.scope != record.scope
-                        || done.file_digest != record.file_digest
-                        || done.completed_at.is_none()
-                        || done.created_at != record.created_at
-                        || done.proof != record.proof
-                        || done.states != record.states
-                        || done.acknowledged_digests != record.acknowledged_digests
-                    {
+                    if current != body {
                         return Err(invalid());
                     }
                 }
                 Err(error) => return Err(error),
             }
-            self.directory.remove(&state_name(&record.file), previous)?;
+            match self.directory.remove(&state_name(&record.file), previous) {
+                Ok(()) => {}
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                    // Only the exact authenticated completion proves a prior
+                    // successful removal; missing state alone proves nothing.
+                    if self.directory.read(&name)? != body {
+                        return Err(invalid());
+                    }
+                }
+                Err(error) => return Err(error),
+            }
         } else {
             self.directory
                 .replace(&state_name(&record.file), previous, &body)?;
