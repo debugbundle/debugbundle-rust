@@ -172,7 +172,7 @@ RELEASE_ENV = $(CANDIDATE_ENV) -e RELEASE_VERSION -e RELEASE_SOURCE_SHA
 release-preflight:
 	$(DOCKER_RUN) $(RELEASE_ENV) $(RUST_IMAGE) sh scripts/release-candidate.sh preflight
 release-publish:
-	@$(DOCKER_RUN) $(RELEASE_ENV) -e CARGO_REGISTRIES_CRATES_IO_TOKEN $(RUST_IMAGE) sh scripts/release-candidate.sh publish
+	@$(DOCKER_RUN) $(RELEASE_ENV) -e CARGO_REGISTRY_TOKEN $(RUST_IMAGE) sh scripts/release-candidate.sh publish
 test-registry-tools:
 	docker run --rm --init --network none -v "$(CURDIR):/work:ro" -w /work $(BROWSER_NODE_IMAGE) node --test scripts/check-published.test.mjs
 smoke-published:

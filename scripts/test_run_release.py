@@ -37,6 +37,19 @@ class ReleaseRunnerTests(unittest.TestCase):
             command = call.call_args[0][0]
             self.assertIn("/release-candidate.sh", command)
             self.assertTrue(any(value.endswith(":/release-candidate.sh:ro") for value in command))
+            self.assertNotIn("CARGO_REGISTRY_TOKEN", command)
+
+    def test_only_publish_forwards_the_standard_cargo_registry_credential(self):
+        with tempfile.TemporaryDirectory() as directory:
+            arguments, receipts = self.fixture(Path(directory))
+            arguments[1] = "publish"
+            result = subprocess.CompletedProcess([], 0, "publish completed\n")
+            with patch("sys.argv", arguments), patch.dict(os.environ, RELEASE_SOURCE_SHA="a" * 40), \
+                    patch.object(RUNNER.subprocess, "run", return_value=result) as call, \
+                    self.assertRaises(SystemExit):
+                RUNNER.main()
+            command = call.call_args[0][0]
+            self.assertIn("CARGO_REGISTRY_TOKEN", command)
             self.assertNotIn("CARGO_REGISTRIES_CRATES_IO_TOKEN", command)
 
     def test_timeouts_retain_partial_output_and_invalid_identity_never_starts_docker(self):

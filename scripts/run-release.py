@@ -37,7 +37,7 @@ def main():
                        "-e", "DEBUGBUNDLE_CANDIDATE_SHA256",
                        "-e", f"DEBUGBUNDLE_CANDIDATE_ARTIFACT=/selected/{artifact.name}"]
             if args.mode == "publish":
-                command += ["-e", "CARGO_REGISTRIES_CRATES_IO_TOKEN"]
+                command += ["-e", "CARGO_REGISTRY_TOKEN"]
             command += [match[1], "sh", "/release-candidate.sh", args.mode]
         result = subprocess.run(command, cwd=source, stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, text=True, timeout=1800)

@@ -40,6 +40,8 @@ class CandidatePreflightTests(unittest.TestCase):
             result = subprocess.run(["sh", "scripts/release-candidate.sh", "preflight"],
                                     cwd=root, env=environment, capture_output=True, text=True)
             marker = (root / ".tmp/release/preflight.sha256").exists()
+            for package_target in (root / ".tmp/release").glob("preflight-package.*"):
+                self.assertEqual(package_target.stat().st_mode & 0o777, 0o755)
             return result, marker
 
     def test_fresh_publish_output_passes_and_stale_package_cannot_mask_a_mismatch(self):

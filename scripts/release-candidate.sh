@@ -19,12 +19,15 @@ sh scripts/check-candidate.sh
 # Cargo 1.99 publishes from package/tmp-crate, unlike `cargo package`.
 # A fresh target prevents an earlier package command from masking missing output.
 package_target=$(mktemp -d "$output/$mode-package.XXXXXX")
+# Only public crate files are written here. Hosted artifact upload runs as the
+# checkout owner rather than the container's root user.
+chmod 755 "$package_target"
 if [ "$mode" = preflight ]; then
     # Cargo publish creates a package again. Pin the compiler/lock/source and
     # compare that dry-run package with the artifact every OS qualified.
     CARGO_TARGET_DIR="$package_target" cargo publish --registry crates-io --locked --no-verify --dry-run > "$output/dry-run.log" 2>&1 || { cat "$output/dry-run.log"; exit 1; }
 else
-    test -n "${CARGO_REGISTRIES_CRATES_IO_TOKEN:-}" || { echo "Selected publishing credential is missing" >&2; exit 1; }
+    test -n "${CARGO_REGISTRY_TOKEN:-}" || { echo "Selected publishing credential is missing" >&2; exit 1; }
     test -f "$output/preflight.sha256"
     test "$(cat "$output/preflight.sha256")" = "$DEBUGBUNDLE_CANDIDATE_SHA256"
     # This is the only external mutation in this script. Never retry it
