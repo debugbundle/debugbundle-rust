@@ -125,7 +125,7 @@ jobs:
       - name: Published native Browser through both extracted Rust relay adapters
         run: make test-browser-relays
       - name: Instrumented capture, full queues and real native HTTP slow peer
-        run: make evidence-performance performance-check
+        run: make evidence-performance performance-check PERFORMANCE_BASELINE=smoke/performance/baselines/github-linux-aarch64.json
       - name: Keep browser and resource acceptance receipts
         if: always()
         uses: actions/upload-artifact@v7.0.2

@@ -8,14 +8,16 @@ import { test } from "node:test";
 test("performance acceptance rejects missing cases, wrong runners, latency and zero-allocation regressions",async()=>{
   const directory = await mkdtemp(join(tmpdir(),"rust-performance-gate-"));
   const report = JSON.parse(await readFile(process.env.PERFORMANCE_REPORT,"utf8"));
-  const baseline = JSON.parse(await readFile("smoke/performance/baselines/linux-aarch64.json","utf8"));
+  const baselinePath = process.env.PERFORMANCE_BASELINE ?? "smoke/performance/baselines/linux-aarch64.json";
+  const baseline = JSON.parse(await readFile(baselinePath,"utf8"));
   const check = async value => {
     const file = join(directory,"report.json");
     await writeFile(file,JSON.stringify(value));
-    return spawnSync(process.execPath,["scripts/check-performance.mjs",file],{encoding:"utf8",timeout:10000});
+    return spawnSync(process.execPath,["scripts/check-performance.mjs",file,baselinePath],{encoding:"utf8",timeout:10000});
   };
   try {
-    assert.equal((await check(report)).status,0,"actual measured report must pass before testing rejection");
+    const measured = await check(report);
+    assert.equal(measured.status,0,`actual measured report must pass before testing rejection:\n${measured.stderr}`);
     for(const change of [
       value=>value.cases.pop(),
       value=>{value.architecture="unqualified-runner";},

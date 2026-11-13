@@ -136,6 +136,7 @@ native-test-http:
 
 .PHONY: performance-lock evidence-performance performance-format performance-check
 PERFORMANCE_REPORT ?= .tmp/performance/report.json
+PERFORMANCE_BASELINE ?= smoke/performance/baselines/linux-aarch64.json
 performance-format: toolchain
 	$(DOCKER_RUN) $(TOOLS_IMAGE) cargo fmt --manifest-path smoke/performance/Cargo.toml
 performance-lock:
@@ -147,8 +148,8 @@ evidence-performance:
 	$(DOCKER_RUN) $(RUST_IMAGE) rustc -vV > .tmp/performance/toolchain.txt
 	$(CARGO) metadata --locked --offline --format-version 1 --manifest-path smoke/performance/Cargo.toml > .tmp/performance/dependencies.json
 performance-check:
-	docker run --rm --init --network none -e PERFORMANCE_REPORT="$(PERFORMANCE_REPORT)" -v "$(CURDIR):/work:ro" -w /work $(BROWSER_NODE_IMAGE) node --test scripts/check-performance.test.mjs
-	docker run --rm --init --network none -v "$(CURDIR):/work:ro" -w /work $(BROWSER_NODE_IMAGE) node scripts/check-performance.mjs "$(PERFORMANCE_REPORT)"
+	docker run --rm --init --network none -e PERFORMANCE_REPORT="$(PERFORMANCE_REPORT)" -e PERFORMANCE_BASELINE="$(PERFORMANCE_BASELINE)" -v "$(CURDIR):/work:ro" -w /work $(BROWSER_NODE_IMAGE) node --test scripts/check-performance.test.mjs
+	docker run --rm --init --network none -v "$(CURDIR):/work:ro" -w /work $(BROWSER_NODE_IMAGE) node scripts/check-performance.mjs "$(PERFORMANCE_REPORT)" "$(PERFORMANCE_BASELINE)"
 
 .PHONY: browser-lock browser-install browser-host test-browser-relays
 BROWSER_NODE_IMAGE ?= node:24.14.0-bookworm@sha256:5a593d74b632d1c6f816457477b6819760e13624455d587eef0fa418c8d0777b

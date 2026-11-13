@@ -91,18 +91,111 @@ fn recovery_is_off_without_local_opt_in_or_proof_and_stale_owners_cannot_admit()
 }
 
 #[test]
+fn every_recovery_state_preserves_explicit_page_scope_and_timing() {
+    let recorder = Arc::new(Recorder::default());
+    let client = client(recorder.clone());
+    let context = Context::default()
+        .with_trace_id(FAILURE)
+        .with_session_id("33333333-3333-4333-8333-333333333333");
+    let at = chrono::Utc::now() - chrono::Duration::milliseconds(100);
+    for (state, expected) in [
+        (RecoveryState::AttemptStarted, "attempt_started"),
+        (RecoveryState::AttemptCompleted, "attempt_completed"),
+        (RecoveryState::AttemptFailed, "attempt_failed"),
+        (RecoveryState::RecoveryObserved, "recovery_observed"),
+        (RecoveryState::FailurePersisted, "failure_persisted"),
+    ] {
+        let mut value = observation(state);
+        value.scope = Some(debugbundle::EvidenceScope::Page {
+            page_id: ATTEMPT.into(),
+        });
+        value.duration = Some(Duration::from_millis(123));
+        value.occurred_at = Some(at);
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        loop {
+            client.capture_recovery(&value, &context);
+            assert!(client.flush(Duration::from_secs(1)).drained);
+            if recorder
+                .events
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|event| event["payload"]["state"] == expected)
+            {
+                break;
+            }
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::yield_now();
+        }
+    }
+    let events = recorder.events.lock().unwrap();
+    let recovery = events
+        .iter()
+        .filter(|event| event["event_type"] == "diagnostic_context")
+        .collect::<Vec<_>>();
+    assert_eq!(recovery.len(), 5);
+    for event in recovery {
+        assert_eq!(
+            event["payload"]["scope"],
+            json!({"kind":"page","page_id":ATTEMPT})
+        );
+        assert_eq!(event["payload"]["duration_ms"].as_f64(), Some(123.0));
+        assert_eq!(
+            event["occurred_at"],
+            at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+        );
+    }
+}
+
+#[test]
 fn ack_releases_bytes_without_refunding_observation_allowances() {
+    use std::time::Instant;
     let recorder = Arc::new(Recorder::default());
     let client = client(recorder.clone());
     let operation = client.start_operation(OperationOptions::default());
-    for _ in 0..25 {
+    let count = || {
+        recorder
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|event| {
+                event["event_type"] == "diagnostic_context"
+                    && event["payload"]["kind"] == "recovery"
+            })
+            .count()
+    };
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while count() < 20 {
+        client.capture_recovery(
+            &observation(RecoveryState::AttemptStarted),
+            &operation.context(),
+        );
+        assert!(client.flush(Duration::from_secs(1)).drained);
+        assert!(
+            Instant::now() < deadline,
+            "recovery admission never reached its allowance"
+        );
+        std::thread::yield_now();
+    }
+    for _ in 0..5 {
         client.capture_recovery(
             &observation(RecoveryState::AttemptStarted),
             &operation.context(),
         );
         assert!(client.flush(Duration::from_secs(1)).drained);
     }
-    assert_eq!(recorder.events.lock().unwrap().len(), 20);
+    assert_eq!(count(), 20, "ACK must not refund recovery allowances");
+    // Contended best-effort calls can additionally emit operational pressure
+    // summaries. Those are not recovery observations and consume no allowance.
+    assert!(recorder
+        .events
+        .lock()
+        .unwrap()
+        .iter()
+        .all(|event| event["event_type"] == "diagnostic_context"
+            || (event["event_type"] == "error_suppressed"
+                && event["payload"]["reason"] == "queue_pressure")));
 }
 
 #[test]

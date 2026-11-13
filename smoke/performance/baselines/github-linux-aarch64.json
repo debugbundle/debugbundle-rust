@@ -1,0 +1,533 @@
+{
+  "schema_version": 1,
+  "architecture": "aarch64",
+  "platform": "GitHub ubuntu-24.04-arm; Neoverse-N2; Linux Docker; 2 CPUs pinned 0,1; 2 GiB; three sequential repeats on one disposable runner",
+  "rust_image": "rust:1.99.1-bookworm@sha256:e6f2cff35d0f309acf8433b4f05878ed77092602c5065cc81801177da0bb3a9c",
+  "instrumentation": "current-thread allocation-counter 0.8.1; timings include its overhead; setup, queue seeding, drain and snapshot reads excluded",
+  "policy": "p99 <= four times worst of three measured repeats, rounded up to 1 us, floor 2.5 us; caller allocation totals <= 110 percent of worst repeat; measured zero allocations remain exactly zero. These are instrumented regression guardrails, not a product latency SLA. Host variance is explicit.",
+  "source_commit": "9e4bb48c4e427b041cba7bf5e575a66f8b29ab2e",
+  "measurement_commit": "3d4a84594b5895c66946cc67eedb53645c23bd15",
+  "measurement_run": "https://github.com/debugbundle/debugbundle-rust/actions/runs/43393447198",
+  "source_digest_sha256": "95b8001ff6c6599328b029ec3f4dcbf6e9a284ebfaac64f51a6bdc920f0f837d",
+  "provenance_sha256": {
+    "host.txt": "25d25df5931c77a0c0bfe30530cebafe0fe0bc2ca0f0bc52c6803b17fff73554",
+    "toolchain.txt": "ba203e33fe4a5b8e05147bb6e57fb1ddace26d9f799f357420b666887dd7e2f1",
+    "dependencies.json": "c1be8425162802861959cefd03da4687639091d5f6b4b231b4deb64620cfe3bb",
+    "source-files.txt": "95b8001ff6c6599328b029ec3f4dcbf6e9a284ebfaac64f51a6bdc920f0f837d"
+  },
+  "reports": [
+    {
+      "name": "one.json",
+      "sha256": "6dd9f9877560d79d0c039a9d0de94d8e1a080ccb4ecf9d05e3f199400c55e7a1",
+      "memory_and_threads": [
+        "VmHWM:\t   15572 kB",
+        "VmRSS:\t   15572 kB",
+        "Threads:\t4"
+      ]
+    },
+    {
+      "name": "two.json",
+      "sha256": "9f5d1748e86d3ea673c7adee9c2fcab781044bd8760998c1b35449cfbeced292",
+      "memory_and_threads": [
+        "VmHWM:\t   15616 kB",
+        "VmRSS:\t   15616 kB",
+        "Threads:\t4"
+      ]
+    },
+    {
+      "name": "three.json",
+      "sha256": "d8239b0f5492f4f653e5d7d79fef929cd1b15c2cbfd07eafbf9935be19deee25",
+      "memory_and_threads": [
+        "VmHWM:\t   15608 kB",
+        "VmRSS:\t   15608 kB",
+        "Threads:\t3"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "case": "capture/disabled",
+      "samples": 512,
+      "observed_p50_ns": [
+        40,
+        40,
+        40
+      ],
+      "observed_p95_ns": [
+        48,
+        48,
+        48
+      ],
+      "observed_p99_ns": [
+        56,
+        56,
+        56
+      ],
+      "p99_budget_ns": 2500,
+      "caller_allocations_budget": 0,
+      "caller_allocated_bytes_budget": 0
+    },
+    {
+      "case": "tracing/disabled",
+      "samples": 512,
+      "observed_p50_ns": [
+        64,
+        64,
+        64
+      ],
+      "observed_p95_ns": [
+        64,
+        64,
+        64
+      ],
+      "observed_p99_ns": [
+        72,
+        72,
+        72
+      ],
+      "p99_budget_ns": 2500,
+      "caller_allocations_budget": 0,
+      "caller_allocated_bytes_budget": 0
+    },
+    {
+      "case": "log/disabled",
+      "samples": 32,
+      "observed_p50_ns": [
+        48,
+        48,
+        48
+      ],
+      "observed_p95_ns": [
+        72,
+        64,
+        64
+      ],
+      "observed_p99_ns": [
+        729,
+        672,
+        712
+      ],
+      "p99_budget_ns": 3000,
+      "caller_allocations_budget": 0,
+      "caller_allocated_bytes_budget": 0
+    },
+    {
+      "case": "axum/disabled",
+      "samples": 64,
+      "observed_p50_ns": [
+        1728,
+        1712,
+        1720
+      ],
+      "observed_p95_ns": [
+        1808,
+        1768,
+        1824
+      ],
+      "observed_p99_ns": [
+        2800,
+        2608,
+        10161
+      ],
+      "p99_budget_ns": 41000,
+      "caller_allocations_budget": 1760,
+      "caller_allocated_bytes_budget": 172259
+    },
+    {
+      "case": "actix/disabled",
+      "samples": 64,
+      "observed_p50_ns": [
+        2912,
+        2944,
+        2880
+      ],
+      "observed_p95_ns": [
+        3032,
+        3048,
+        2984
+      ],
+      "observed_p99_ns": [
+        4880,
+        4889,
+        4544
+      ],
+      "p99_budget_ns": 20000,
+      "caller_allocations_budget": 1408,
+      "caller_allocated_bytes_budget": 66730
+    },
+    {
+      "case": "capture/baseline",
+      "samples": 512,
+      "observed_p50_ns": [
+        59298,
+        60194,
+        58914
+      ],
+      "observed_p95_ns": [
+        65834,
+        69386,
+        68642
+      ],
+      "observed_p99_ns": [
+        77467,
+        75450,
+        82530
+      ],
+      "p99_budget_ns": 331000,
+      "caller_allocations_budget": 470949,
+      "caller_allocated_bytes_budget": 19164764
+    },
+    {
+      "case": "tracing/baseline",
+      "samples": 512,
+      "observed_p50_ns": [
+        102731,
+        103548,
+        103155
+      ],
+      "observed_p95_ns": [
+        109628,
+        111203,
+        112548
+      ],
+      "observed_p99_ns": [
+        122500,
+        123068,
+        123828
+      ],
+      "p99_budget_ns": 496000,
+      "caller_allocations_budget": 847666,
+      "caller_allocated_bytes_budget": 31868031
+    },
+    {
+      "case": "log/baseline",
+      "samples": 32,
+      "observed_p50_ns": [
+        82451,
+        84419,
+        83346
+      ],
+      "observed_p95_ns": [
+        97483,
+        98195,
+        95163
+      ],
+      "observed_p99_ns": [
+        98203,
+        100779,
+        103899
+      ],
+      "p99_budget_ns": 416000,
+      "caller_allocations_budget": 43306,
+      "caller_allocated_bytes_budget": 1565494
+    },
+    {
+      "case": "axum/baseline",
+      "samples": 64,
+      "observed_p50_ns": [
+        162853,
+        161221,
+        159813
+      ],
+      "observed_p95_ns": [
+        174886,
+        174990,
+        175517
+      ],
+      "observed_p99_ns": [
+        194607,
+        203934,
+        188646
+      ],
+      "p99_budget_ns": 816000,
+      "caller_allocations_budget": 139020,
+      "caller_allocated_bytes_budget": 6002177
+    },
+    {
+      "case": "actix/baseline",
+      "samples": 64,
+      "observed_p50_ns": [
+        168757,
+        170277,
+        161572
+      ],
+      "observed_p95_ns": [
+        185142,
+        195182,
+        177869
+      ],
+      "observed_p99_ns": [
+        195598,
+        203135,
+        197430
+      ],
+      "p99_budget_ns": 813000,
+      "caller_allocations_budget": 139766,
+      "caller_allocated_bytes_budget": 5906668
+    },
+    {
+      "case": "capture/evidence",
+      "samples": 512,
+      "observed_p50_ns": [
+        119051,
+        118643,
+        119132
+      ],
+      "observed_p95_ns": [
+        126203,
+        128588,
+        129748
+      ],
+      "observed_p99_ns": [
+        133068,
+        142677,
+        136189
+      ],
+      "p99_budget_ns": 571000,
+      "caller_allocations_budget": 986203,
+      "caller_allocated_bytes_budget": 41612797
+    },
+    {
+      "case": "tracing/evidence",
+      "samples": 512,
+      "observed_p50_ns": [
+        103243,
+        105587,
+        104139
+      ],
+      "observed_p95_ns": [
+        109587,
+        113387,
+        111371
+      ],
+      "observed_p99_ns": [
+        120948,
+        121883,
+        124771
+      ],
+      "p99_budget_ns": 500000,
+      "caller_allocations_budget": 847663,
+      "caller_allocated_bytes_budget": 31867204
+    },
+    {
+      "case": "log/evidence",
+      "samples": 32,
+      "observed_p50_ns": [
+        82098,
+        81962,
+        81155
+      ],
+      "observed_p95_ns": [
+        89450,
+        86842,
+        88315
+      ],
+      "observed_p99_ns": [
+        101283,
+        91667,
+        90251
+      ],
+      "p99_budget_ns": 406000,
+      "caller_allocations_budget": 43299,
+      "caller_allocated_bytes_budget": 1565229
+    },
+    {
+      "case": "axum/evidence",
+      "samples": 64,
+      "observed_p50_ns": [
+        227455,
+        223687,
+        220647
+      ],
+      "observed_p95_ns": [
+        248088,
+        240400,
+        242544
+      ],
+      "observed_p99_ns": [
+        268008,
+        261880,
+        255240
+      ],
+      "p99_budget_ns": 1073000,
+      "caller_allocations_budget": 203353,
+      "caller_allocated_bytes_budget": 8748696
+    },
+    {
+      "case": "actix/evidence",
+      "samples": 64,
+      "observed_p50_ns": [
+        236071,
+        228655,
+        226727
+      ],
+      "observed_p95_ns": [
+        254632,
+        251016,
+        244432
+      ],
+      "observed_p99_ns": [
+        263840,
+        265504,
+        258960
+      ],
+      "p99_budget_ns": 1063000,
+      "caller_allocations_budget": 204121,
+      "caller_allocated_bytes_budget": 8673110
+    },
+    {
+      "case": "pressure-hook/capture-and-lazy",
+      "samples": 512,
+      "observed_p50_ns": [
+        872,
+        864,
+        864
+      ],
+      "observed_p95_ns": [
+        912,
+        904,
+        912
+      ],
+      "observed_p99_ns": [
+        944,
+        928,
+        944
+      ],
+      "p99_budget_ns": 4000,
+      "caller_allocations_budget": 7886,
+      "caller_allocated_bytes_budget": 121696
+    },
+    {
+      "case": "pressure-hook/tracing-and-log",
+      "samples": 512,
+      "observed_p50_ns": [
+        80,
+        80,
+        80
+      ],
+      "observed_p95_ns": [
+        88,
+        88,
+        88
+      ],
+      "observed_p99_ns": [
+        96,
+        152,
+        96
+      ],
+      "p99_budget_ns": 2500,
+      "caller_allocations_budget": 0,
+      "caller_allocated_bytes_budget": 0
+    },
+    {
+      "case": "pressure-transport/capture-and-lazy",
+      "samples": 512,
+      "observed_p50_ns": [
+        872,
+        864,
+        864
+      ],
+      "observed_p95_ns": [
+        912,
+        904,
+        904
+      ],
+      "observed_p99_ns": [
+        936,
+        928,
+        944
+      ],
+      "p99_budget_ns": 4000,
+      "caller_allocations_budget": 7886,
+      "caller_allocated_bytes_budget": 121696
+    },
+    {
+      "case": "pressure-transport/tracing-and-log",
+      "samples": 512,
+      "observed_p50_ns": [
+        80,
+        80,
+        80
+      ],
+      "observed_p95_ns": [
+        88,
+        88,
+        88
+      ],
+      "observed_p99_ns": [
+        96,
+        168,
+        104
+      ],
+      "p99_budget_ns": 2500,
+      "caller_allocations_budget": 0,
+      "caller_allocated_bytes_budget": 0
+    },
+    {
+      "case": "pressure-native-http/capture-and-lazy",
+      "samples": 512,
+      "observed_p50_ns": [
+        872,
+        864,
+        856
+      ],
+      "observed_p95_ns": [
+        920,
+        904,
+        904
+      ],
+      "observed_p99_ns": [
+        944,
+        928,
+        936
+      ],
+      "p99_budget_ns": 4000,
+      "caller_allocations_budget": 7886,
+      "caller_allocated_bytes_budget": 121696
+    },
+    {
+      "case": "pressure-native-http/tracing-and-log",
+      "samples": 512,
+      "observed_p50_ns": [
+        80,
+        80,
+        80
+      ],
+      "observed_p95_ns": [
+        88,
+        88,
+        88
+      ],
+      "observed_p99_ns": [
+        88,
+        160,
+        168
+      ],
+      "p99_budget_ns": 2500,
+      "caller_allocations_budget": 0,
+      "caller_allocated_bytes_budget": 0
+    },
+    {
+      "case": "pressure/diagnostic-ledger",
+      "samples": 512,
+      "observed_p50_ns": [
+        80131,
+        80090,
+        80603
+      ],
+      "observed_p95_ns": [
+        85387,
+        86627,
+        85387
+      ],
+      "observed_p99_ns": [
+        86723,
+        93139,
+        87642
+      ],
+      "p99_budget_ns": 373000,
+      "caller_allocations_budget": 687676,
+      "caller_allocated_bytes_budget": 33268364
+    }
+  ]
+}

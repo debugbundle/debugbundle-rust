@@ -65,6 +65,19 @@ resource contracts fail closed. These instrumented development-container budgets
 are not a product latency SLA; another host/architecture needs an inspected
 baseline and native CI acceptance.
 
+Local Docker Desktop runs select `baselines/linux-aarch64.json`; the GitHub
+`ubuntu-24.04-arm` job explicitly selects `baselines/github-linux-aarch64.json`
+through `PERFORMANCE_BASELINE` (both under `smoke/performance/`). The latter
+records three Neoverse-N2 repeats from measurement-only run
+[`43393447198`](https://github.com/debugbundle/debugbundle-rust/actions/runs/43393447198),
+with identical SDK/benchmark source at `9e4bb48`, report hashes and host/compiler
+provenance. Both use the same budget formula and unchanged hard resource caps.
+The disabled Axum control's measured p99 varies from 2,608 to 10,161 ns across
+those repeats; it includes framework and instrumentation overhead. Its 41,000 ns
+CI guard is a regression budget, not SDK capture cost. Most active-case latency
+budgets are tighter on this host. CI never regenerates a baseline automatically;
+a source, workload or runner change requires inspected measurements and review.
+
 Native CI installs only pinned Rust 1.100.0, llvm-tools-preview for that compiler
 and cargo-llvm-cov 0.9.1 on disposable macOS/Windows runners. Local development
 keeps Rust, Cargo and npm work in Docker. `make windows-typecheck` cross-checks the
