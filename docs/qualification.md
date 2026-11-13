@@ -12,6 +12,9 @@ coverage includes those and excludes the Unix-only implementation. Neither targe
 can establish coverage of the other platform's OS calls.
 Test helpers are excluded. This stable LLVM lane does not establish branch or
 function coverage. Dependency policy has no advisory suppressions.
+Manual-capture fixtures exercise protected error/message aliases, empty-message
+fallback, deployment metadata, invalid/oversized request targets and request-body
+omission at the documented byte limit before transport.
 
 `test-loggers` executes the native fixtures with `log` and `tracing` independently,
 without default HTTP features. Fixtures observe best-effort admission with a finite
