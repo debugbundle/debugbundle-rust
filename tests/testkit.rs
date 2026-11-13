@@ -3,7 +3,27 @@ use debugbundle::{
     delivery::Transport, testkit::RecordingTransport, Client, Config, Context, Level,
 };
 use serde_json::{json, Value};
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
+// Snapshot observation is explicitly non-waiting: the sender may briefly own
+// state even after flush returns. Wait only for availability, never for desired
+// accounting values, so every assertion below still checks the first snapshot.
+fn resource_snapshot(client: &Client) -> debugbundle::testkit::ResourceSnapshot {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        if let Some(snapshot) = debugbundle::testkit::resources(client) {
+            return snapshot;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "resource snapshot remained unavailable"
+        );
+        std::thread::sleep(Duration::from_millis(1));
+    }
+}
 
 #[test]
 fn resource_snapshots_preserve_queue_and_recovery_accounting_across_ack_and_owner_stop() {
@@ -38,7 +58,7 @@ fn resource_snapshots_preserve_queue_and_recovery_accounting_across_ack_and_owne
         },
         &context,
     );
-    let before = debugbundle::testkit::resources(&client).unwrap();
+    let before = resource_snapshot(&client);
     assert_eq!(before.buffered_events, 2);
     assert_eq!(before.pending_diagnostics, 1);
     assert_eq!(before.diagnostic_windows, 1);
@@ -48,27 +68,17 @@ fn resource_snapshots_preserve_queue_and_recovery_accounting_across_ack_and_owne
     assert!((1..=8).contains(&before.process_client_slots));
     assert!((1..=8).contains(&before.process_callback_workers));
     assert_eq!(client.flush(Duration::from_secs(2)).accepted_events, 2);
-    let after = debugbundle::testkit::resources(&client).unwrap();
+    let after = resource_snapshot(&client);
     assert_eq!(after.buffered_events, 0);
     assert_eq!(after.pending_diagnostics, 0);
     assert_eq!(after.diagnostic_windows, 1);
     assert!(after.diagnostic_bytes < before.diagnostic_bytes);
     operation.stop();
     assert!(!context.operation_active());
-    assert_eq!(
-        debugbundle::testkit::resources(&client)
-            .unwrap()
-            .operation_slots,
-        0
-    );
+    assert_eq!(resource_snapshot(&client).operation_slots, 0);
     drop(context);
     drop(operation);
-    assert_eq!(
-        debugbundle::testkit::resources(&client)
-            .unwrap()
-            .operation_slots,
-        0
-    );
+    assert_eq!(resource_snapshot(&client).operation_slots, 0);
 }
 #[test]
 fn recording_transport_exercises_public_capture_retry_privacy_and_drain() {
