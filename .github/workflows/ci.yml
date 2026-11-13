@@ -84,6 +84,7 @@ jobs:
           name: rust-crate-${{ matrix.runner }}
           path: |
             .tmp/packages/
+            .tmp/selected/
             .tmp/package-qualification/
           include-hidden-files: true
           if-no-files-found: error
@@ -202,5 +203,6 @@ jobs:
           path: |
             .tmp/coverage/
             .tmp/native-package/
+            .tmp/selected/
           include-hidden-files: true
           if-no-files-found: error

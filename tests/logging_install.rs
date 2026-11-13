@@ -8,7 +8,7 @@ use std::{
         atomic::{AtomicUsize, Ordering},
         Arc,
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 struct ApplicationSink {
@@ -89,14 +89,30 @@ fn logging_install_child() {
     ] {
         assert!(log::logger().enabled(&log::Metadata::builder().level(level).build()));
     }
-    log::error!("native error through application sink");
-    assert!(client.flush(Duration::from_secs(2)).drained);
-    assert_eq!(records.load(Ordering::SeqCst), 1);
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut attempts = 0;
+    loop {
+        // SDK admission is nonblocking/best effort while the sender owns its
+        // state mutex. Application logging must run exactly once per attempt,
+        // even when that optional SDK admission is declined.
+        log::error!("native error through application sink");
+        attempts += 1;
+        assert!(client.flush(Duration::from_secs(2)).drained);
+        if !recorder.events.lock().unwrap().is_empty() {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "native logger never admitted a record"
+        );
+        std::thread::yield_now();
+    }
+    assert_eq!(records.load(Ordering::SeqCst), attempts);
     assert_eq!(recorder.events.lock().unwrap().len(), 1);
     client.detach_logging();
     log::warn!("application logging remains after detach");
     log::logger().flush();
-    assert_eq!(records.load(Ordering::SeqCst), 2);
+    assert_eq!(records.load(Ordering::SeqCst), attempts + 1);
     assert_eq!(flushes.load(Ordering::SeqCst), 1);
     assert!(client.flush(Duration::from_secs(2)).drained);
     assert_eq!(recorder.events.lock().unwrap().len(), 1);

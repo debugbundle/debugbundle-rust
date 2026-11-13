@@ -266,19 +266,46 @@ fn deferred_hooks_and_failed_logger_admission_cannot_suppress_the_only_capture()
 #[cfg(feature = "tracing")]
 #[test]
 fn tracing_rechecks_the_same_callsite_after_queue_recovery_and_detach() {
+    use std::time::Instant;
     use tracing_subscriber::layer::SubscriberExt;
     let recorder = Arc::new(Recorder::default());
     let mut config = configured(recorder.clone());
     config.max_buffered_events = 1;
     let client = Client::new(config);
-    client.capture_log(Level::Error, "fill", &Context::default());
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while client.status().buffered_events == 0 {
+        client.capture_log(Level::Error, "fill", &Context::default());
+        assert!(Instant::now() < deadline);
+        std::thread::yield_now();
+    }
     let subscriber = tracing_subscriber::registry().with(client.tracing_layer());
     tracing::subscriber::with_default(subscriber, || {
         let emit = || tracing::error!(message = "dynamic callsite");
         emit();
         assert!(client.flush(Duration::from_secs(2)).drained);
-        emit();
-        assert!(client.flush(Duration::from_secs(2)).drained);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            // Draining releases event ownership; it does not reserve an idle
+            // state mutex for the next best-effort nonblocking capture. Repeat
+            // the same callsite until observed, still failing if it was cached
+            // permanently disabled while the queue was full.
+            emit();
+            assert!(client.flush(Duration::from_secs(2)).drained);
+            if recorder
+                .events
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|event| event["payload"]["message"] == "dynamic callsite")
+            {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "recovered callsite stayed disabled"
+            );
+            std::thread::yield_now();
+        }
         client.detach_logging();
         emit();
         assert!(client.flush(Duration::from_secs(1)).drained);

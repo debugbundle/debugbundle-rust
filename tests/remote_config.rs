@@ -58,6 +58,9 @@ impl Server {
                     std::thread::sleep(Duration::from_millis(1));
                     continue;
                 };
+                // Accepted sockets can inherit the listener's nonblocking mode
+                // on native platforms. This fixture uses finite blocking reads.
+                stream.set_nonblocking(false).unwrap();
                 stream
                     .set_read_timeout(Some(Duration::from_secs(2)))
                     .unwrap();
@@ -86,6 +89,12 @@ impl Server {
                         }
                     }
                 }
+                // A pooled or cancelled client can close an unused connection.
+                // That is not an HTTP request and must not kill the fixture.
+                let Some(header_len) = header_len.filter(|offset| bytes.len() >= offset + length)
+                else {
+                    continue;
+                };
                 let text = String::from_utf8_lossy(&bytes);
                 let path = text.lines().next().unwrap_or("").to_owned();
                 queries.lock().unwrap().push(path.clone());
@@ -98,10 +107,8 @@ impl Server {
                     headers.lock().unwrap().push(text.to_string());
                     (reply, status, etag)
                 } else {
-                    let request: Value = serde_json::from_slice(
-                        &bytes[header_len.unwrap()..header_len.unwrap() + length],
-                    )
-                    .unwrap();
+                    let request: Value =
+                        serde_json::from_slice(&bytes[header_len..header_len + length]).unwrap();
                     let values = request["events"].as_array().unwrap();
                     records.lock().unwrap().extend(values.iter().cloned());
                     (
@@ -155,6 +162,27 @@ fn policy() -> Value {
 }
 fn config() -> Value {
     json!({"probes_enabled":true,"remote_probes_enabled":true,"active_probes":[],"trigger_token_key":"synthetic-signing-key","capture_policy":policy()})
+}
+
+#[test]
+fn configuration_fixture_ignores_closed_connections_and_keeps_serving() {
+    let server = Server::new(json!({}));
+    let address = server
+        .endpoint
+        .strip_prefix("http://")
+        .unwrap()
+        .strip_suffix("/v1/events")
+        .unwrap();
+    drop(std::net::TcpStream::connect(address).unwrap());
+    let client = server.client();
+    wait(&client);
+    assert!(server
+        .requests
+        .lock()
+        .unwrap()
+        .iter()
+        .all(|request| request.starts_with("GET ")));
+    assert!(client.shutdown(Duration::from_secs(1)).drained);
 }
 
 #[tokio::test]

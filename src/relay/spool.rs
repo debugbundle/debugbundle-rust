@@ -553,7 +553,7 @@ impl Store {
             if age < ttl {
                 continue;
             }
-            let Ok(_lease) = self.directory.lock(&lease_name(&record.file)) else {
+            let Ok(lease) = self.directory.lock(&lease_name(&record.file)) else {
                 continue;
             };
             match self.directory.read(&record.file) {
@@ -570,6 +570,10 @@ impl Store {
             if let Some((raw, _)) = companion {
                 self.directory.remove(&companion_name, &raw)?;
             }
+            // All callers hold GUARD, preventing a new scanner/admission from
+            // acquiring this lease between close and removal. Windows locks are
+            // mandatory and the handle also denies delete-sharing.
+            drop(lease);
             self.directory.remove(&lease_name(&record.file), &[])?;
         }
         Ok(())

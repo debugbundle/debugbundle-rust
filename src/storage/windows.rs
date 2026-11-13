@@ -221,7 +221,12 @@ impl Directory {
         if self.regular(&file)? != 0 {
             return Err(denied());
         }
-        file.try_lock().map_err(|_| denied())?;
+        file.try_lock().map_err(|error| match error {
+            std::fs::TryLockError::WouldBlock => {
+                io::Error::new(io::ErrorKind::WouldBlock, "storage lease is busy")
+            }
+            std::fs::TryLockError::Error(error) => error,
+        })?;
         self.verify()?;
         Ok(file)
     }
