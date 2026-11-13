@@ -20,6 +20,8 @@ without changing or rebuilding its archive. Current tooling repackages that clea
 source using its own pinned compiler and lockfile, and compares the resulting
 bytes before any publishing credential is used. Git's ownership exception is
 command-scoped to that deliberate container checkout, never a global wildcard.
+Each publish/dry-run gets a fresh target directory and checks Cargo 1.99's actual
+`package/tmp-crate` output; a cached `cargo package` archive cannot qualify it.
 Every new SDK source/artifact still requires its own complete native qualification.
 
 The `crates-io` GitHub environment permits main recovery and version tags. In the
