@@ -37,6 +37,12 @@ then revoke/remove the bootstrap token. A trusted-authentication failure never
 falls back to the bootstrap credential. Initial account/registry ownership is a
 one-time prerequisite, not a per-release form.
 
+After registering the identity, verify it without publishing another version:
+`gh workflow run release.yml --repo debugbundle/debugbundle-rust -f verify_publisher_only=true`.
+This uses the same workflow/environment identity, obtains the temporary credential
+and revokes it in the official action's cleanup. No SDK qualification or crate
+upload runs in this mode.
+
 An existing, non-yanked version with the same public checksum selects verification
 only and never uploads again. A mismatched/yanked version fails closed. There is
 no automatic upload retry: an upload can succeed before Cargo reports a timeout.

@@ -9,6 +9,11 @@ on:
         required: false
         default: main
         type: string
+      verify_publisher_only:
+        description: Verify the one-time crates.io identity without publishing
+        required: false
+        default: false
+        type: boolean
 permissions:
   contents: read
   actions: read
@@ -16,8 +21,21 @@ concurrency:
   group: rust-release
   cancel-in-progress: false
 jobs:
+  verify-publisher:
+    if: github.repository == 'debugbundle/debugbundle-rust' && inputs.verify_publisher_only
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: crates-io
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Verify the exact release workflow's trusted identity
+        uses: rust-lang/crates-io-auth-action@v1.0.6
+      - name: Record the successful exchange without publishing
+        run: echo 'crates.io accepted the release workflow identity. No crate was uploaded; the action revokes its temporary token during cleanup.' >> "$GITHUB_STEP_SUMMARY"
   prepare:
-    if: github.repository == 'debugbundle/debugbundle-rust'
+    if: github.repository == 'debugbundle/debugbundle-rust' && !inputs.verify_publisher_only
     runs-on: ubuntu-24.04
     timeout-minutes: 70
     outputs:
