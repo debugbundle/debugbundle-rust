@@ -2,19 +2,19 @@
 
 Safe, bounded runtime error reporting for vanilla Rust, Tokio, Axum and Actix Web.
 
-This SDK is an unpublished release candidate. Every candidate must pass the source and exact-crate CI matrix on Linux x64/arm64, macOS and Windows. See [qualification](docs/qualification.md) and the [same-commit CI run](https://github.com/debugbundle/debugbundle-rust/actions/workflows/ci.yml) for evidence and the separate release gates.
+The [1.0.0-alpha.1 prerelease](https://crates.io/crates/debugbundle/1.0.0-alpha.1) is published from `eb9e09afc02751ebd34464bfa4b8808a565635b4`. Its source and exact crate passed all eight qualification jobs on Linux x64/arm64, macOS and Windows, followed by genuine registry-installed standalone, Axum and Actix applications. Evaluate this alpha before production adoption. See [qualification](docs/qualification.md) for the exact-source gates.
 
-No crates.io release is available from this work. `make package` prepares a local
-candidate; `make smoke-package` tests its extracted contents in isolated vanilla,
-Axum and Actix applications. Registry ownership and publication are separate gates.
+Every later SDK source/artifact requires its own qualification. `make package`
+prepares a local candidate; `make smoke-package` tests its extracted contents.
+Version tags start the automated [release workflow](docs/releasing.md).
 
 ## First local event
 
-Use the extracted local candidate in an isolated evaluation application:
+Pin the published alpha in an evaluation application:
 
 ```toml
 [dependencies]
-debugbundle = { path = "/path/to/extracted/debugbundle-1.0.0-alpha.1", default-features = false, features = ["local"] }
+debugbundle = { version = "=1.0.0-alpha.1", default-features = false, features = ["local"] }
 ```
 
 ```rust
@@ -85,6 +85,6 @@ The current API and its runtime limits are documented in
 [the API guide](docs/runtime-and-api.md) and [configuration reference](docs/configuration.md). Axum/Tower and Actix middleware have
 source integration tests. Extracted-crate vanilla/Axum/Actix consumers run on Linux x64/arm64, macOS and Windows; genuine published Browser ordinary/beacon/keepalive relay paths run on Linux arm64. Audit refinements must pass those gates again. See the
 [qualification guide](docs/qualification.md) and
-[manual release procedure](docs/releasing.md) for exact artifact and registry gates.
+[release procedure](docs/releasing.md) for exact artifact and registry gates.
 
 Licensed under Apache-2.0.

@@ -56,6 +56,23 @@ including container stderr, exit status and timeout output. Missing diagnostic
 files cannot replace the primary failure with an artifact-upload error. The SDK
 archive and source identity remain separate from the release-tooling identity.
 
+## First publication receipt
+
+`1.0.0-alpha.1` is published from `eb9e09afc02751ebd34464bfa4b8808a565635b4`,
+with SHA-256 `1aed6405f1b6b80ef9430d8300e9efe330a9e06be8c51587da0a41fe07abd8bc`.
+Run `43530643791` passed preflight, bootstrap upload, public checksum/download
+and real registry-installed standalone/Axum/Actix applications. Its final GitHub
+release creation received HTTP 403 under the workflow integration; the owner CLI
+completed that same-source prerelease and asset without uploading to crates.io again.
+The already-published verification recovery is `43531207396`. Future tag releases
+already have their source tag before finalisation; never grant a broader workflow
+credential just to recover a historical source tag.
+
+The GitHub environment and tag automation are configured. The one-time crates.io
+Trusted Publisher registration and its first OIDC exchange are not yet verified.
+Do not claim future unattended publication is operational until that identity is
+registered and checked. The bootstrap token is never used for existing crates.
+
 References: [Cargo publish](https://doc.rust-lang.org/cargo/commands/cargo-publish.html),
 [registry index](https://doc.rust-lang.org/cargo/reference/registry-index.html),
 [trusted publishing](https://crates.io/docs/trusted-publishing),

@@ -1,6 +1,6 @@
 # Candidate qualification
 
-This is an unpublished SDK candidate. Every source change requires a fresh [eight-job CI run](https://github.com/debugbundle/debugbundle-rust/actions/workflows/ci.yml) and artifact seal, including Linux x64/arm64, native macOS/Windows and consumers of one immutable crate. Match the commit and checksum in that run before relying on its acceptance. Running local Linux tests alone never establishes other platforms, registry publication or consumer adoption.
+The `1.0.0-alpha.1` prerelease is published from `eb9e09a`, with crate SHA-256 `1aed6405f1b6b80ef9430d8300e9efe330a9e06be8c51587da0a41fe07abd8bc`. Every later source change requires a fresh [eight-job CI run](https://github.com/debugbundle/debugbundle-rust/actions/workflows/ci.yml) and artifact seal, including Linux x64/arm64, native macOS/Windows and consumers of one immutable crate. Match the commit and checksum in that run before relying on its acceptance. Running local Linux tests alone never establishes other platforms, registry publication or consumer adoption.
 
 Historical baseline `244c104` passed [all eight jobs](https://github.com/debugbundle/debugbundle-rust/actions/runs/43406799897). It does not qualify later audit changes.
 
@@ -104,9 +104,9 @@ consumers and Browser relay lanes. Native archive extraction rejects traversal,
 links/devices, duplicate names and portable case/Unicode aliases before writing.
 Pure Python extraction/digest tests and pinned Node registry-verification tests
 run without Rust or network. Both workflows pass pinned actionlint validation.
-See [release qualification and ownership](releasing.md) for the separate manual
-publication path and genuine crates.io consumers. Those registry consumers remain
-unrun until a version is explicitly published.
+See [release qualification and ownership](releasing.md) for the automated tag
+publication path and genuine crates.io consumers. Published `1.0.0-alpha.1` passes
+the public checksum/download checks and standalone, Axum and non-Send Actix apps.
 
 The bounded deterministic property corpus covers 2,560 generated privacy,
 capability and indexed-ACK cases. `make fuzz` additionally uses cargo-fuzz 0.13.2,
