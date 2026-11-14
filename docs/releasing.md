@@ -74,10 +74,13 @@ The already-published verification recovery is `43531207396`. Future tag release
 already have their source tag before finalisation; never grant a broader workflow
 credential just to recover a historical source tag.
 
-The GitHub environment and tag automation are configured. The one-time crates.io
-Trusted Publisher registration and its first OIDC exchange are not yet verified.
-Do not claim future unattended publication is operational until that identity is
-registered and checked. The bootstrap token is never used for existing crates.
+The GitHub environment and tag automation are configured. After the owner saved
+the crates.io Trusted Publisher, credential-only run `43575500128` passed the real
+OIDC exchange and temporary-token cleanup with qualification/publication skipped.
+The obsolete GitHub bootstrap environment secret was removed. Revoking the original
+crates.io account token is a separate owner action, not proved by secret removal.
+Future authorised version tags use the verified trusted identity; the bootstrap
+token is never used for existing crates.
 
 References: [Cargo publish](https://doc.rust-lang.org/cargo/commands/cargo-publish.html),
 [registry index](https://doc.rust-lang.org/cargo/reference/registry-index.html),

@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased — 1.0.0-alpha.1
+## [1.0.0] — 2026-11-14
 
-Initial Rust SDK candidate: bounded primitive capture, mandatory privacy, typed
+Initial stable Rust SDK: bounded primitive capture, mandatory privacy, typed
 exception evidence, strict indexed delivery, private local arrays, revocable
 operation/task context, probes, authenticated configuration, signed triggers,
 opt-in recovery, composable tracing/log adapters and explicit panic observation.
@@ -51,5 +51,13 @@ remain active when SDK capture is disabled or detached. Existing performance
 budgets and benchmark samples remain unchanged.
 Rejected recursive calls preserve the outer guard for native log/tracing
 adapters and panic observation, including repeated application-bridge attempts.
-The audit candidate requires fresh qualification; publication remains on hold.
-No package publication or consumer adoption is implied.
+Every release requires fresh exact-source and exact-artifact qualification.
+Version-tag publishing derives the qualified archive automatically and uses
+crates.io Trusted Publishing, followed by genuine registry-installed standalone,
+Axum and Actix applications. Current packaged documentation includes registry
+installation instructions for the stable version.
+
+## [1.0.0-alpha.1] — 2026-11-13
+
+Initial prerelease of the audited SDK. The stable release retains its runtime
+behaviour and incorporates release automation and package-documentation corrections.

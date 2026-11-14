@@ -1,6 +1,9 @@
 # Rust API and runtime boundaries
 
-This SDK remains unpublished. Its baseline source and extracted-crate matrix passed on Linux x64/arm64, macOS and Windows. Audit refinements require fresh qualification; registry publication and consumer adoption remain separate. See [qualification](qualification.md).
+SDK `1.0.0` supports Linux x64/arm64, macOS and Windows. Every release requires
+source and extracted-crate qualification for its exact commit and archive;
+registry installation and consumer adoption remain separate checks. See
+[qualification](qualification.md).
 
 ## Client and capture
 

@@ -1,6 +1,6 @@
 [package]
 name = "debugbundle"
-version = "1.0.0-alpha.1"
+version = "1.0.0"
 edition = "2021"
 rust-version = "1.89"
 description = "Safe, bounded runtime error reporting for Rust, Axum and Actix Web"

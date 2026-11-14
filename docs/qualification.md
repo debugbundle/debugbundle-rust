@@ -1,6 +1,10 @@
-# Candidate qualification
+# Release qualification
 
-The `1.0.0-alpha.1` prerelease is published from `eb9e09a`, with crate SHA-256 `1aed6405f1b6b80ef9430d8300e9efe330a9e06be8c51587da0a41fe07abd8bc`. Every later source change requires a fresh [eight-job CI run](https://github.com/debugbundle/debugbundle-rust/actions/workflows/ci.yml) and artifact seal, including Linux x64/arm64, native macOS/Windows and consumers of one immutable crate. Match the commit and checksum in that run before relying on its acceptance. Running local Linux tests alone never establishes other platforms, registry publication or consumer adoption.
+Every release, including `1.0.0`, requires a fresh [eight-job CI run](https://github.com/debugbundle/debugbundle-rust/actions/workflows/ci.yml) and artifact seal, including Linux x64/arm64, native macOS/Windows and consumers of one immutable crate. Match the commit and checksum in that run before relying on its acceptance. Running local Linux tests alone never establishes other platforms, registry publication or consumer adoption.
+
+Historical `1.0.0-alpha.1` is published from `eb9e09a`, with crate SHA-256
+`1aed6405f1b6b80ef9430d8300e9efe330a9e06be8c51587da0a41fe07abd8bc`. Its
+acceptance does not qualify the stable release's new source or archive.
 
 Historical baseline `244c104` passed [all eight jobs](https://github.com/debugbundle/debugbundle-rust/actions/runs/43406799897). It does not qualify later audit changes.
 

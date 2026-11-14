@@ -2,7 +2,11 @@
 
 Safe, bounded runtime error reporting for vanilla Rust, Tokio, Axum and Actix Web.
 
-The [1.0.0-alpha.1 prerelease](https://crates.io/crates/debugbundle/1.0.0-alpha.1) is published from `eb9e09afc02751ebd34464bfa4b8808a565635b4`. Its source and exact crate passed all eight qualification jobs on Linux x64/arm64, macOS and Windows, followed by genuine registry-installed standalone, Axum and Actix applications. Evaluate this alpha before production adoption. See [qualification](docs/qualification.md) for the exact-source gates.
+The SDK supports Rust 1.89+, Tokio, Tower 0.5, Axum 0.8 and Actix Web 4, with
+composable `tracing` and `log` integrations and browser relays. Source and exact
+crate qualification covers Linux x64/arm64, macOS and Windows. See
+[qualification](docs/qualification.md) for the release gates and
+[crates.io](https://crates.io/crates/debugbundle) for published versions.
 
 Every later SDK source/artifact requires its own qualification. `make package`
 prepares a local candidate; `make smoke-package` tests its extracted contents.
@@ -10,11 +14,11 @@ Version tags start the automated [release workflow](docs/releasing.md).
 
 ## First local event
 
-Pin the published alpha in an evaluation application:
+Add the SDK with explicit local-file support:
 
 ```toml
 [dependencies]
-debugbundle = { version = "=1.0.0-alpha.1", default-features = false, features = ["local"] }
+debugbundle = { version = "1.0.0", default-features = false, features = ["local"] }
 ```
 
 ```rust
