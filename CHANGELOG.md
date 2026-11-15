@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+## [1.0.2] - 2026-11-15
+
+- Withhold hook replacements that exceed bounded JSON validation before optional-field reduction. Unvalidated malformed evidence cannot be silently repaired or restore pre-hook content.
+
+- Select the current package's exact archive for native preparation when older local candidates are retained.
+- Preserve invalid-return fallback when optional evidence is both malformed and oversized; cover mixed evidence fields with the shared hook-budget corpus.
+
 ## [1.0.1] - 2026-11-15
 
 - Align installation, initialization, integrations, first-event verification and configuration documentation with the shared SDK pattern. Keep credentials, delivery modes and runtime lifecycle requirements explicit.

@@ -12,7 +12,7 @@ Or add the dependency to `Cargo.toml`:
 
 ```toml
 [dependencies]
-debugbundle = "1.0.1"
+debugbundle = "1.0.2"
 ```
 
 Requires Rust 1.89 or newer. Enable framework and logging features only when using those integrations.
@@ -73,7 +73,7 @@ Add the SDK with explicit local-file support:
 
 ```toml
 [dependencies]
-debugbundle = { version = "1.0.1", default-features = false, features = ["local"] }
+debugbundle = { version = "1.0.2", default-features = false, features = ["local"] }
 ```
 
 ```rust
@@ -143,3 +143,13 @@ crate qualification covers Linux x64/arm64, macOS and Windows. See
 Every later SDK source/artifact requires its own qualification. `make package`
 prepares a local candidate; `make smoke-package` tests its extracted contents.
 Version tags start the automated [release workflow](docs/releasing.md).
+
+### Hook size limits (unreleased correction)
+
+A valid `before_send` replacement keeps its primary fields when optional exception
+evidence crosses the combined 32 KiB limit. The SDK removes that evidence and its
+typed reference and records `context.evidence_limits`. Malformed evidence still
+uses the protected-original fallback even when it also exceeds the byte limit.
+Mandatory privacy and existing ownership/transport limits remain enforced.
+
+Hook replacements beyond the bounded JSON validation limit are withheld before optional-field reduction. Unvalidated shape is not treated as valid optional evidence, and the SDK does not restore pre-hook content in this case. Normal valid 32 KiB evidence overflow still preserves the reduced replacement.

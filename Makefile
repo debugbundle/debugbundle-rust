@@ -5,6 +5,7 @@ DOCKER_RUN = docker run --rm --init --ulimit core=0:0 -v "$(CURDIR):/work" -w /w
 CARGO = $(DOCKER_RUN) $(RUST_IMAGE) cargo
 CANDIDATE_ENV = -e DEBUGBUNDLE_CANDIDATE_ARTIFACT -e DEBUGBUNDLE_CANDIDATE_SHA256
 TOOLS_IMAGE = debugbundle-rust-tools:1.99.1
+PACKAGE_VERSION = $(shell sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)
 
 .PHONY: toolchain
 toolchain:
@@ -76,7 +77,7 @@ test-features:
 package:
 	$(CARGO) package --locked --allow-dirty
 	$(DOCKER_RUN) $(RUST_IMAGE) sh scripts/check-package-consumers.sh export
-	python3 scripts/native-package.py --prepare-only --artifact .tmp/packages/*.crate
+	python3 scripts/native-package.py --prepare-only --artifact ".tmp/packages/debugbundle-$(PACKAGE_VERSION).crate"
 .PHONY: candidate smoke-package-lock smoke-package format-package-consumers compatibility-lock test-compatibility
 candidate:
 	@if [ -n "$$DEBUGBUNDLE_CANDIDATE_ARTIFACT" ]; then \

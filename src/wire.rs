@@ -34,6 +34,10 @@ pub(crate) fn prepare() -> bool {
 // schema validity from wire budgets prevents restoring pre-hook content when a
 // valid replacement is too large to retain or transmit.
 pub(crate) fn valid_shape(event: &Value) -> bool {
+    valid_shape_with_budget(event, true)
+}
+
+fn valid_shape_with_budget(event: &Value, check_byte_budget: bool) -> bool {
     if !SCHEMA.as_ref().is_some_and(|s| s.is_valid(event)) {
         return false;
     }
@@ -42,7 +46,7 @@ pub(crate) fn valid_shape(event: &Value) -> bool {
     }
     let p = &event["payload"];
     if let Some(graph) = p.get("exception_evidence") {
-        if !valid_graph(graph) {
+        if !valid_graph_shape(graph, check_byte_budget) {
             return false;
         }
     }
@@ -53,7 +57,7 @@ pub(crate) fn valid_shape(event: &Value) -> bool {
     }) {
         return false;
     }
-    if !evidence_within_budget(event) {
+    if check_byte_budget && !evidence_within_budget(event) {
         return false;
     }
     if event["event_type"] == "diagnostic_context" {
@@ -245,6 +249,10 @@ pub fn valid_reference(reference: &Value) -> bool {
         && valid_scope(&reference["scope"])
 }
 pub(crate) fn valid_graph(graph: &Value) -> bool {
+    valid_graph_shape(graph, true)
+}
+
+fn valid_graph_shape(graph: &Value, check_byte_budget: bool) -> bool {
     let Some(nodes) = graph["nodes"].as_array() else {
         return false;
     };
@@ -253,7 +261,8 @@ pub(crate) fn valid_graph(graph: &Value) -> bool {
     // pass composition but fail the final event's identical evidence budget.
     if nodes.is_empty()
         || nodes.len() > 8
-        || canonical_size(graph).is_none_or(|n| n > 32768 - b"{\"exception_evidence\":}".len())
+        || check_byte_budget
+            && canonical_size(graph).is_none_or(|n| n > 32768 - b"{\"exception_evidence\":}".len())
     {
         return false;
     }
@@ -567,10 +576,20 @@ pub(crate) fn hook_replacement(
     replacement: Value,
     original: Value,
 ) -> Option<Value> {
-    let output = {
+    let bounded = preflight(&replacement);
+    let within_evidence_budget = bounded && evidence_within_budget(&replacement);
+    let output = if !bounded {
+        // Unknown shape at the ownership limit is not valid optional evidence.
+        // Withhold it without restoring content the owner removed.
+        None
+    } else if !within_evidence_budget && !valid_shape_with_budget(&replacement, false) {
+        // Budget reduction cannot turn malformed optional data into an accepted
+        // hook return. Only aggregate byte refinements may be bypassed here.
+        Some(original)
+    } else {
         // A shared evidence-budget failure is not a malformed owner envelope.
         // Reduce its optional data before validation can restore the original.
-        let view = if preflight(&replacement) && evidence_within_budget(&replacement) {
+        let view = if within_evidence_budget {
             Some(std::borrow::Cow::Borrowed(&replacement))
         } else {
             without_optional(&replacement).map(std::borrow::Cow::Owned)
