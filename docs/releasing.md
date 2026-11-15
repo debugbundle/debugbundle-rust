@@ -64,7 +64,7 @@ archive and source identity remain separate from the release-tooling identity.
 
 ## First publication receipt
 
-`1.0.1-alpha.1` is published from `eb9e09afc02751ebd34464bfa4b8808a565635b4`,
+`1.0.0-alpha.1` is published from `eb9e09afc02751ebd34464bfa4b8808a565635b4`,
 with SHA-256 `1aed6405f1b6b80ef9430d8300e9efe330a9e06be8c51587da0a41fe07abd8bc`.
 Run `43530643791` passed preflight, bootstrap upload, public checksum/download
 and real registry-installed standalone/Axum/Actix applications. Its final GitHub
