@@ -2,23 +2,78 @@
 
 Safe, bounded runtime error reporting for vanilla Rust, Tokio, Axum and Actix Web.
 
-The SDK supports Rust 1.89+, Tokio, Tower 0.5, Axum 0.8 and Actix Web 4, with
-composable `tracing` and `log` integrations and browser relays. Source and exact
-crate qualification covers Linux x64/arm64, macOS and Windows. See
-[qualification](docs/qualification.md) for the release gates and
-[crates.io](https://crates.io/crates/debugbundle) for published versions.
+## Installation
 
-Every later SDK source/artifact requires its own qualification. `make package`
-prepares a local candidate; `make smoke-package` tests its extracted contents.
-Version tags start the automated [release workflow](docs/releasing.md).
+```bash
+cargo add debugbundle
+```
 
-## First local event
+Or add the dependency to `Cargo.toml`:
+
+```toml
+[dependencies]
+debugbundle = "1.0.1"
+```
+
+Requires Rust 1.89 or newer. Enable framework and logging features only when using those integrations.
+
+## Initialize
+
+Run this in application startup and retain `client` for the application lifetime. Set `DEBUGBUNDLE_PROJECT_TOKEN` in the server environment. The example sets `environment` and `service` explicitly; `..Config::default()` supplies the remaining options. Initialization starts the client; panic observation and framework capture are explicit integrations. Flush only when verifying an event or during controlled shutdown.
+
+```rust
+use debugbundle::Config;
+
+let client = debugbundle::init(Config {
+    project_token: std::env::var("DEBUGBUNDLE_PROJECT_TOKEN").unwrap_or_default(),
+    environment: "production".into(),
+    service: "api".into(),
+    ..Config::default()
+});
+```
+
+## Integrations
+
+Tokio, Tower, Axum and Actix Web, composable tracing/log integrations and browser relays are supported.
+
+### Features and integrations
+
+| Feature | Purpose |
+| --- | --- |
+| `http` (default) | Pooled Rustls HTTP with native trust; optional explicit proxy |
+| `local` | Private event files and durable browser relay storage |
+| `tower` | Native Tower readiness/future/body lifecycle |
+| `axum` | Axum middleware and browser relay; includes HTTP/local/Tower |
+| `actix-web` | Native non-Send Actix middleware and browser relay; includes HTTP/local |
+| `tracing` | Composable per-layer filtering and bounded primitive field capture |
+| `log` | Composable logger with explicit tee/fallible global installation |
+| `testkit` | Bounded protected recording transport with indexed ACKs |
+
+Compose `client.tracing_layer()` into an existing subscriber, or use
+`client.logger().tee(existing_sink)` with the `log` feature. Instrument Axum with
+`debugbundle::axum::DebugBundleLayer::new(client.clone())`, or Actix with
+`debugbundle::actix_web::DebugBundleMiddleware::new(client.clone())`.
+
+Both native `browser_relay(relay)` factories mount `/debugbundle/browser` and
+provide origin validation, bounded uploads, credential isolation and durable
+connected admission. Configure explicit allowed origins for split hosts. Browser
+service names such as `checkout-web` remain distinct from backend `checkout-api`
+unless the relay explicitly overrides them. See [the API guide](docs/runtime-and-api.md)
+for complete lifecycle, body opt-in, proxy/peer, spool and status semantics.
+
+Keep the guard returned by `client.install_panic_observer()` alive if you opt into panic observation. Process aborts do not guarantee delivery.
+
+## First-event verification
+
+Use an explicit setup event in a development or staging application, then confirm the matching service and environment in a received event or incident. Initialization, a healthy status and an empty queue are not delivery receipts. Keep the application running long enough for delivery; use bounded flushing only in tests or controlled teardown, never in a request handler.
+
+<a id="first-local-event"></a>
 
 Add the SDK with explicit local-file support:
 
 ```toml
 [dependencies]
-debugbundle = { version = "1.0.0", default-features = false, features = ["local"] }
+debugbundle = { version = "1.0.1", default-features = false, features = ["local"] }
 ```
 
 ```rust
@@ -48,30 +103,14 @@ For connected capture, retain the default `http` feature and use
 development. Missing/invalid credentials produce an inactive client visible in
 `status()`. Capture and a drained queue alone do not establish cloud acceptance.
 
-## Features and integrations
+For connected delivery, confirm the event in DebugBundle and inspect its incident with the CLI. For local-file delivery, run `debugbundle process` followed by `debugbundle inspect <incident-id>`. A local file or mock endpoint receipt proves only that destination; it does not prove cloud acceptance.
 
-| Feature | Purpose |
-| --- | --- |
-| `http` (default) | Pooled Rustls HTTP with native trust; optional explicit proxy |
-| `local` | Private event files and durable browser relay storage |
-| `tower` | Native Tower readiness/future/body lifecycle |
-| `axum` | Axum middleware and browser relay; includes HTTP/local/Tower |
-| `actix-web` | Native non-Send Actix middleware and browser relay; includes HTTP/local |
-| `tracing` | Composable per-layer filtering and bounded primitive field capture |
-| `log` | Composable logger with explicit tee/fallible global installation |
-| `testkit` | Bounded protected recording transport with indexed ACKs |
+## Configuration
 
-Compose `client.tracing_layer()` into an existing subscriber, or use
-`client.logger().tee(existing_sink)` with the `log` feature. Instrument Axum with
-`debugbundle::axum::DebugBundleLayer::new(client.clone())`, or Actix with
-`debugbundle::actix_web::DebugBundleMiddleware::new(client.clone())`.
+Set the project token, environment and service explicitly for your application. Keep the service name stable across deploys and distinct from other components. Configure optional capture, transport, privacy and probe settings only when needed.
 
-Both native `browser_relay(relay)` factories mount `/debugbundle/browser` and
-provide origin validation, bounded uploads, credential isolation and durable
-connected admission. Configure explicit allowed origins for split hosts. Browser
-service names such as `checkout-web` remain distinct from backend `checkout-api`
-unless the relay explicitly overrides them. See [the API guide](docs/runtime-and-api.md)
-for complete lifecycle, body opt-in, proxy/peer, spool and status semantics.
+See the [Rust configuration and runtime guide](https://debugbundle.com/docs/sdks/rust) and the [universal SDK interface](https://debugbundle.com/docs/sdks/universal-interface) for supported options and runtime limits.
+`Config::from_env()` reads `DEBUGBUNDLE_PROJECT_TOKEN`, `DEBUGBUNDLE_SERVICE`, `DEBUGBUNDLE_ENVIRONMENT` and optional `DEBUGBUNDLE_ENDPOINT`. Connected mode always uses HTTP; `Config::local` selects local files explicitly. See [the configuration reference](https://github.com/debugbundle/debugbundle-rust/blob/main/docs/configuration.md).
 
 ## Development
 
@@ -92,3 +131,15 @@ source integration tests. Extracted-crate vanilla/Axum/Actix consumers run on Li
 [release procedure](docs/releasing.md) for exact artifact and registry gates.
 
 Licensed under Apache-2.0.
+
+## Runtime and release qualification
+
+The SDK supports Rust 1.89+, Tokio, Tower 0.5, Axum 0.8 and Actix Web 4, with
+composable `tracing` and `log` integrations and browser relays. Source and exact
+crate qualification covers Linux x64/arm64, macOS and Windows. See
+[qualification](docs/qualification.md) for the release gates and
+[crates.io](https://crates.io/crates/debugbundle) for published versions.
+
+Every later SDK source/artifact requires its own qualification. `make package`
+prepares a local candidate; `make smoke-package` tests its extracted contents.
+Version tags start the automated [release workflow](docs/releasing.md).

@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.1] - 2026-11-15
+
+- Align installation, initialization, integrations, first-event verification and configuration documentation with the shared SDK pattern. Keep credentials, delivery modes and runtime lifecycle requirements explicit.
+- Runtime APIs and capture behavior are unchanged; this patch updates distributed documentation and package version metadata.
+
+
 ## [1.0.0] — 2026-11-14
 
 Initial stable Rust SDK: bounded primitive capture, mandatory privacy, typed

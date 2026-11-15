@@ -1,8 +1,8 @@
 # Release qualification
 
-Every release, including `1.0.0`, requires a fresh [eight-job CI run](https://github.com/debugbundle/debugbundle-rust/actions/workflows/ci.yml) and artifact seal, including Linux x64/arm64, native macOS/Windows and consumers of one immutable crate. Match the commit and checksum in that run before relying on its acceptance. Running local Linux tests alone never establishes other platforms, registry publication or consumer adoption.
+Every release, including `1.0.1`, requires a fresh [eight-job CI run](https://github.com/debugbundle/debugbundle-rust/actions/workflows/ci.yml) and artifact seal, including Linux x64/arm64, native macOS/Windows and consumers of one immutable crate. Match the commit and checksum in that run before relying on its acceptance. Running local Linux tests alone never establishes other platforms, registry publication or consumer adoption.
 
-Historical `1.0.0-alpha.1` is published from `eb9e09a`, with crate SHA-256
+Historical `1.0.1-alpha.1` is published from `eb9e09a`, with crate SHA-256
 `1aed6405f1b6b80ef9430d8300e9efe330a9e06be8c51587da0a41fe07abd8bc`. Its
 acceptance does not qualify the stable release's new source or archive.
 
@@ -109,7 +109,7 @@ links/devices, duplicate names and portable case/Unicode aliases before writing.
 Pure Python extraction/digest tests and pinned Node registry-verification tests
 run without Rust or network. Both workflows pass pinned actionlint validation.
 See [release qualification and ownership](releasing.md) for the automated tag
-publication path and genuine crates.io consumers. Published `1.0.0-alpha.1` passes
+publication path and genuine crates.io consumers. Published `1.0.1-alpha.1` passes
 the public checksum/download checks and standalone, Axum and non-Send Actix apps.
 
 The bounded deterministic property corpus covers 2,560 generated privacy,

@@ -1,6 +1,6 @@
 # Rust API and runtime boundaries
 
-SDK `1.0.0` supports Linux x64/arm64, macOS and Windows. Every release requires
+SDK `1.0.1` supports Linux x64/arm64, macOS and Windows. Every release requires
 source and extracted-crate qualification for its exact commit and archive;
 registry installation and consumer adoption remain separate checks. See
 [qualification](qualification.md).

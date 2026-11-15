@@ -1,6 +1,6 @@
 # Configuration reference
 
-For SDK `1.0.0`, construct a `Config`, override
+For SDK `1.0.1`, construct a `Config`, override
 fields with Rust struct update syntax, then call `Client::new`. Invalid enabled
 configuration produces an inactive client with a fixed safe `status().reason`;
 capture remains harmless. `Config::validate()` returns the typed validation error
