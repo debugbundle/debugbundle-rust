@@ -144,7 +144,7 @@ Every later SDK source/artifact requires its own qualification. `make package`
 prepares a local candidate; `make smoke-package` tests its extracted contents.
 Version tags start the automated [release workflow](docs/releasing.md).
 
-### Hook size limits (unreleased correction)
+### Hook size limits
 
 A valid `before_send` replacement keeps its primary fields when optional exception
 evidence crosses the combined 32 KiB limit. The SDK removes that evidence and its
