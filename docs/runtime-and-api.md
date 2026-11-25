@@ -53,7 +53,15 @@ deployment metadata. Capture methods return no delivery guarantee.
 `client.set_context(&context)` replaces the client's protected persistent metadata;
 active operation and per-capture context overlay it. It does not install a global
 request scope. Use request/operation context for concurrent per-request values.
-Mandatory credential rules always apply and `redact_fields` only extends them.
+Mandatory credential rules always apply; `redact_fields` (broad segment-aware) and
+`redact_exact_fields` (ASCII case-insensitive whole-key/query-parameter matching with
+punctuation significant) only extend them within the shared 128-key / 64-byte bound.
+Validated closed SDK protocol structures (`context.evidence_reference`,
+`context.evidence_limits`, `payload.exception_evidence`, `payload.execution`,
+`payload.resource_observations`, and relayed `browser_event`/`rejection_reason`)
+are preserved against broad custom field-name collisions while every nested
+free-text or URL string and all application/context fields still receive mandatory
+and custom redaction.
 Trace/session helpers accept opaque UUIDv4 values. `with_request_id` accepts a
 nonempty printable ASCII identifier up to 128 bytes; values changed by mandatory
 privacy are omitted. `with_evidence_reference` adds

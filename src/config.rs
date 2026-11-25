@@ -37,6 +37,7 @@ pub struct Config {
     pub max_event_age: Duration,
     pub request_timeout: Duration,
     pub redact_fields: Vec<String>,
+    pub redact_exact_fields: Vec<String>,
     pub before_send: Option<BeforeSend>,
     #[cfg(feature = "local")]
     pub relay_rate_limit_store: Option<Arc<dyn crate::relay::RateLimitStore>>,
@@ -72,6 +73,7 @@ impl Default for Config {
             max_event_age: Duration::from_secs(600),
             request_timeout: Duration::from_secs(5),
             redact_fields: Vec::new(),
+            redact_exact_fields: Vec::new(),
             before_send: None,
             #[cfg(feature = "local")]
             relay_rate_limit_store: None,
@@ -120,6 +122,22 @@ impl Config {
         }
         config
     }
+    /// Configure additional broad segment-matched redaction field names.
+    pub fn with_redact_fields(
+        mut self,
+        fields: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        self.redact_fields = fields.into_iter().map(Into::into).collect();
+        self
+    }
+    /// Configure additional ASCII case-insensitive exact-key redaction field names.
+    pub fn with_redact_exact_fields(
+        mut self,
+        fields: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        self.redact_exact_fields = fields.into_iter().map(Into::into).collect();
+        self
+    }
     pub fn validate(&self) -> Result<(), ConfigError> {
         if !self.enabled {
             return Ok(());
@@ -141,8 +159,11 @@ impl Config {
         {
             return Err(ConfigError::MissingToken);
         }
-        let privacy =
-            crate::privacy::Privacy::new(&self.redact_fields).ok_or(ConfigError::InvalidPrivacy)?;
+        let privacy = crate::privacy::Privacy::with_exact_fields(
+            &self.redact_fields,
+            &self.redact_exact_fields,
+        )
+        .ok_or(ConfigError::InvalidPrivacy)?;
         if !technical_identity(&self.service, &privacy)
             || !technical_identity(&self.environment, &privacy)
         {

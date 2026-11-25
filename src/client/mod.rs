@@ -208,7 +208,9 @@ impl Client {
         if !proof_valid || config.validate().is_err() {
             return inactive(config, "invalid_configuration");
         }
-        let Some(privacy) = Privacy::new(&config.redact_fields) else {
+        let Some(privacy) =
+            Privacy::with_exact_fields(&config.redact_fields, &config.redact_exact_fields)
+        else {
             return inactive(config, "invalid_privacy");
         };
         if !crate::wire::prepare() || runtime::handle().is_none() {
@@ -389,7 +391,9 @@ impl Client {
     }
     pub fn set_context(&self, context: &crate::Context) {
         if let Some(inner) = &self.inner {
-            if let Some(protected) = inner.privacy.protect(context.as_value()) {
+            if let Some(protected) =
+                crate::wire::protect_context(&inner.privacy, context.as_value())
+            {
                 if let Ok(mut state) = inner.state.try_lock() {
                     state.context = protected;
                 }

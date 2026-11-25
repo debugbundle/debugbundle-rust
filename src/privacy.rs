@@ -50,6 +50,7 @@ struct Patterns {
     escaped: Regex,
     camel: Regex,
     separators: Regex,
+    value: Regex,
 }
 static PATTERNS: LazyLock<Option<Patterns>> = LazyLock::new(|| {
     Some(Patterns {
@@ -64,6 +65,7 @@ static PATTERNS: LazyLock<Option<Patterns>> = LazyLock::new(|| {
     escaped: Regex::new(r"(?i)(?:password|token|secret|authorization|cookie)%3[ad]").ok()?,
     camel: Regex::new(r"([a-z0-9])([A-Z])").ok()?,
     separators: Regex::new(r"[^a-z0-9]+").ok()?,
+    value: Regex::new(r#"\A(?:"[^"]*"|'[^']*'|[^\s&,;]+)"#).ok()?,
 })
 });
 
@@ -71,13 +73,20 @@ static PATTERNS: LazyLock<Option<Patterns>> = LazyLock::new(|| {
 pub struct Privacy {
     fields: HashSet<String>,
     assignment: Regex,
+    exact_fields: HashSet<String>,
+    exact_assignment: Option<Regex>,
 }
 
 impl Privacy {
     pub fn new(additional: &[String]) -> Option<Self> {
-        if additional.len() > 128
+        Self::with_exact_fields(additional, &[])
+    }
+
+    pub fn with_exact_fields(additional: &[String], exact: &[String]) -> Option<Self> {
+        if additional.len().saturating_add(exact.len()) > 128
             || additional
                 .iter()
+                .chain(exact.iter())
                 .any(|s| s.trim().is_empty() || s.len() > 64)
         {
             return None;
@@ -98,7 +107,31 @@ impl Privacy {
             r#"(?i)\b({names})\b(["']?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s&,;]+)"#
         ))
         .ok()?;
-        Some(Self { fields, assignment })
+        let mut exact_fields = HashSet::new();
+        let mut exact_labels = Vec::new();
+        for item in exact {
+            let trimmed = item.trim();
+            if exact_fields.insert(trimmed.to_ascii_lowercase()) {
+                exact_labels.push(trimmed.to_owned());
+            }
+        }
+        exact_labels.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+        let exact_assignment = if exact_labels.is_empty() {
+            None
+        } else {
+            let exact_names = exact_labels
+                .iter()
+                .map(|s| regex::escape(s))
+                .collect::<Vec<_>>()
+                .join("|");
+            Some(Regex::new(&format!(r#"(?i)({exact_names})(["']?\s*[:=]\s*)"#)).ok()?)
+        };
+        Some(Self {
+            fields,
+            assignment,
+            exact_fields,
+            exact_assignment,
+        })
     }
 
     pub fn protect(&self, value: &Value) -> Option<Value> {
@@ -177,6 +210,9 @@ impl Privacy {
         if key.len() > 128 {
             return true;
         }
+        if self.exact_sensitive_key(key) {
+            return true;
+        }
         let Some(p) = PATTERNS.as_ref() else {
             return true;
         };
@@ -192,6 +228,11 @@ impl Privacy {
             }
         }
         false
+    }
+
+    fn exact_sensitive_key(&self, key: &str) -> bool {
+        !self.exact_fields.is_empty()
+            && self.exact_fields.contains(&key.trim().to_ascii_lowercase())
     }
 
     fn visit(
@@ -295,6 +336,7 @@ impl Privacy {
             .assignment
             .replace_all(&output, "${1}${2}[REDACTED]")
             .into_owned();
+        output = self.scrub_exact_assignments(&output, &p.value);
         let original = output.clone();
         output = p
             .card
@@ -328,6 +370,43 @@ impl Privacy {
                 .into_owned();
         }
         Some(output)
+    }
+
+    fn scrub_exact_assignments(&self, input: &str, value_pattern: &Regex) -> String {
+        let Some(regex) = self.exact_assignment.as_ref() else {
+            return input.to_owned();
+        };
+        let mut output = String::with_capacity(input.len());
+        let mut cursor = 0;
+        let mut copied = 0;
+        while let Some(cap) = regex.captures_at(input, cursor) {
+            let (Some(full), Some(key), Some(sep)) = (cap.get(0), cap.get(1), cap.get(2)) else {
+                break;
+            };
+            let before = input[..key.start()].bytes().next_back();
+            let after = input[key.end()..].bytes().next();
+            let valid_key = self
+                .exact_fields
+                .contains(&key.as_str().to_ascii_lowercase());
+            if valid_key && !before.is_some_and(identifier) && !after.is_some_and(identifier) {
+                if let Some(value) = value_pattern.find(&input[sep.end()..]) {
+                    output.push_str(&input[copied..full.start()]);
+                    output.push_str(key.as_str());
+                    output.push_str(sep.as_str());
+                    output.push_str(REDACTED);
+                    copied = sep.end() + value.end();
+                    cursor = copied;
+                    continue;
+                }
+            }
+            let step = input[full.start()..]
+                .chars()
+                .next()
+                .map_or(1, char::len_utf8);
+            cursor = full.start() + step;
+        }
+        output.push_str(&input[copied..]);
+        output
     }
 
     fn scrub_url(&self, input: &str) -> Option<String> {

@@ -1,5 +1,8 @@
 //! Closed receiving schema plus semantic checks JSON Schema cannot express.
+mod protect;
 pub use crate::analytics_wire::valid_event as valid_analytics_event;
+pub(crate) use protect::protect_context;
+pub use protect::protect_event;
 use serde_json::{json, Map, Value};
 use std::{
     collections::{HashMap, HashSet},
@@ -495,78 +498,6 @@ fn parse_capabilities(value: &Value) -> Option<Vec<String>> {
 }
 pub fn descriptor(features: &[String]) -> Value {
     json!({"version":1,"features":features})
-}
-
-/// Protect application fields without treating protocol names such as session_id
-/// as application secret keys. Unsafe protocol values still withhold the event.
-pub fn protect_event(privacy: &crate::privacy::Privacy, event: &Value) -> Option<Value> {
-    let reduced;
-    let event = if preflight(event) {
-        event
-    } else {
-        reduced = without_optional(event)?;
-        &reduced
-    };
-    let mut output = event.clone();
-    for key in ["payload", "context", "service"] {
-        if let Some(value) = event.get(key) {
-            output[key] = if key == "payload" {
-                privacy.protect_payload(value)?
-            } else {
-                privacy.protect(value)?
-            };
-        }
-    }
-    if event["payload"].get("probe_data").is_some() && output["payload"].get("probe_data").is_none()
-    {
-        if output.get("context").is_none() {
-            output["context"] = json!({});
-        }
-        if let Some(context) = output["context"]
-            .as_object_mut()
-            .filter(|map| map.len() < 256)
-        {
-            context
-                .entry("probe_limits")
-                .or_insert(json!({"version":1,"reason":"budget_exceeded"}));
-        }
-    }
-    if let Some(correlation) = event.get("correlation").and_then(Value::as_object) {
-        for (key, value) in correlation {
-            if let Some(text) = value.as_str() {
-                if privacy.text(text) != text {
-                    return None;
-                }
-            }
-            if value.is_array() || value.is_object() {
-                return None;
-            }
-            output["correlation"][key] = value.clone();
-        }
-    }
-    for key in [
-        "schema_version",
-        "sdk_name",
-        "sdk_version",
-        "event_id",
-        "occurred_at",
-        "project_id",
-    ] {
-        if let Some(text) = event.get(key).and_then(Value::as_str) {
-            if privacy.text(text) != text {
-                return None;
-            }
-        }
-    }
-    if let Some(root) = output.as_object_mut() {
-        root.remove("project_token");
-    }
-    // Optional evidence must also yield at its combined semantic byte limit,
-    // including any expansion caused by mandatory privacy protection.
-    if !evidence_within_budget(&output) {
-        output = without_optional(&output)?;
-    }
-    valid_event(&output).then_some(output)
 }
 
 /// Validate only a bounded view; unknown oversized replacements are withheld

@@ -1,5 +1,7 @@
 use debugbundle::{
-    Client, Config, Context, DeploySnapshot, ExceptionSnapshot, Level, RequestSnapshot,
+    Client, Config, Context, DeploySnapshot, EvidenceScope, ExceptionSnapshot, FrameClassification,
+    FrameSnapshot, Level, OperationKind, OperationOptions, RecoveryObservation, RecoveryState,
+    RequestSnapshot, TraceOrigin,
 };
 use serde_json::json;
 use std::{
@@ -231,4 +233,230 @@ fn missing_configuration_and_zero_sampling_do_not_report_delivery() {
     assert!(client.flush(Duration::from_secs(1)).drained);
     assert!(recorder.events.lock().unwrap().is_empty());
     assert!(client.last_event_at().is_none());
+}
+
+#[test]
+fn redact_exact_fields_masks_exact_keys_while_preserving_compound_siblings() {
+    let recorder = Arc::new(Recorder::default());
+    let client = Client::new(configured(recorder.clone()).with_redact_exact_fields(["tag"]));
+    client.set_context(&Context::new(&json!({
+        "payout": {"tag": "SYNTHETIC_CTX_TAG", "TAG": "SYNTHETIC_CTX_UPPER", "tag_name": "script"},
+        "tag_name": "script",
+        "tagName": "link",
+        "tag-name": "img"
+    })));
+    emit_until(
+        &client,
+        || {
+            client.capture_log(
+                Level::Error,
+                "payout failed tag=SYNTHETIC_LOG_TAG tag_name=script tag-name=img",
+                &Context::new(&json!({
+                    "tag": "SYNTHETIC_LOCAL_TAG",
+                    "tag_name": "script",
+                    "url": "https://example.test/api?tag=SYNTHETIC_QUERY&tag_name=script"
+                })),
+            );
+        },
+        || !recorder.events_without_pressure().is_empty(),
+    );
+    let request = RequestSnapshot {
+        method: "POST".into(),
+        path: "/payout?tag=SYNTHETIC_REQ_TAG&tag_name=script".into(),
+        headers: json!({"tag": "SYNTHETIC_HDR_TAG", "tag-name": "img"}),
+        body: Some(json!({"tag": "SYNTHETIC_BODY_TAG", "tag_name": "script"})),
+        status: 500,
+        ..RequestSnapshot::default()
+    };
+    emit_until(
+        &client,
+        || client.capture_request(&request, &Context::default()),
+        || recorder.events_without_pressure().len() >= 2,
+    );
+    let events = recorder.events_without_pressure();
+    assert_eq!(events.len(), 2);
+    assert!(!serde_json::to_string(&events)
+        .unwrap()
+        .contains("SYNTHETIC_"));
+
+    let log = &events[0];
+    assert_eq!(
+        log["payload"]["message"],
+        "payout failed tag=[REDACTED] tag_name=script tag-name=img"
+    );
+    assert_eq!(log["context"]["tag"], "[REDACTED]");
+    assert_eq!(log["context"]["tag_name"], "script");
+    assert_eq!(log["context"]["tagName"], "link");
+    assert_eq!(log["context"]["tag-name"], "img");
+    assert_eq!(log["context"]["payout"]["tag"], "[REDACTED]");
+    assert_eq!(log["context"]["payout"]["TAG"], "[REDACTED]");
+    assert_eq!(log["context"]["payout"]["tag_name"], "script");
+    assert_eq!(
+        log["context"]["url"],
+        "https://example.test/api?tag=%5BREDACTED%5D&tag_name=script"
+    );
+
+    let req = &events[1];
+    assert_eq!(req["payload"]["query"]["tag"], "[REDACTED]");
+    assert_eq!(req["payload"]["query"]["tag_name"], "script");
+    assert_eq!(req["payload"]["headers"]["tag"], "[REDACTED]");
+    assert_eq!(req["payload"]["headers"]["tag-name"], "img");
+    assert_eq!(req["payload"]["body"]["tag"], "[REDACTED]");
+    assert_eq!(req["payload"]["body"]["tag_name"], "script");
+    assert!(client.shutdown(Duration::from_secs(2)).drained);
+}
+
+#[test]
+fn broad_redact_fields_preserves_validated_protocol_evidence_and_redacts_application_fields() {
+    let recorder = Arc::new(Recorder::default());
+    let failure_ref = "11111111-1111-4111-8111-111111111111";
+    let attempt_id = "22222222-2222-4222-8222-222222222222";
+    let mut config =
+        configured(recorder.clone()).with_redact_fields(["tag", "reference", "reason", "file"]);
+    config.capture_recovery_observations = true;
+    config.evidence_capabilities = Some(json!({
+        "version": 1,
+        "features": ["exception_evidence_v1", "recovery_v1", "evidence_provenance_v1"]
+    }));
+    config.before_send = Some(Arc::new(|mut event| {
+        if event["event_type"] == "backend_exception" {
+            event["context"]["payout"]["tag"] = json!("SYNTHETIC_HOOK_TAG");
+            event["payload"]["exception_evidence"]["nodes"][0]["message"] =
+                json!("reintroduced reason=SYNTHETIC_HOOK_REASON");
+            event["payload"]["execution"]["name"] = json!("payout.run tag=SYNTHETIC_HOOK_EXEC");
+        }
+        Some(event)
+    }));
+
+    let client = Client::new(config);
+    let op = client.start_operation(OperationOptions {
+        kind: OperationKind::Job,
+        name: "payout.run".into(),
+        limit: Some(Duration::from_secs(10)),
+        context: Context::new(&json!({
+            "payout": {
+                "tag": "SYNTHETIC_TAG",
+                "reference": "SYNTHETIC_REF",
+                "reason": "SYNTHETIC_REASON",
+                "file": "SYNTHETIC_FILE"
+            }
+        })),
+        ..OperationOptions::default()
+    });
+    let op_id = op.handle().operation_id().unwrap().to_owned();
+    let scope = EvidenceScope::Operation {
+        operation_id: op_id.clone(),
+    };
+    let context = op.context().with_evidence_reference(failure_ref, &scope);
+    let snapshot = ExceptionSnapshot::new("PayoutError", "failed reason=SYNTHETIC_MSG_REASON")
+        .with_frames(
+            &[
+                FrameSnapshot {
+                    function: Some("execute_payout".into()),
+                    file: Some("/app/src/payout.rs".into()),
+                    line: Some(42),
+                    column: Some(7),
+                    classification: FrameClassification::Application,
+                },
+                FrameSnapshot {
+                    function: Some("fetch_remote".into()),
+                    file: Some(
+                        "https://cdn.example.test/app.js?token=SYNTHETIC_URL_TOKEN&file=SYNTHETIC_URL_FILE"
+                            .into(),
+                    ),
+                    line: Some(11),
+                    column: Some(3),
+                    classification: FrameClassification::Framework,
+                },
+            ],
+            TraceOrigin::Capture,
+        );
+
+    emit_until(
+        &client,
+        || client.capture_exception(&snapshot, &context),
+        || {
+            recorder
+                .events_without_pressure()
+                .iter()
+                .any(|e| e["event_type"] == "backend_exception")
+        },
+    );
+    let recovery = RecoveryObservation {
+        failure_ref: failure_ref.into(),
+        attempt_id: attempt_id.into(),
+        state: RecoveryState::RecoveryObserved,
+        operation: Some("retry tag=SYNTHETIC_OP_TAG".into()),
+        status_code: Some(200),
+        duration: Some(Duration::from_millis(45)),
+        ..Default::default()
+    };
+    emit_until(
+        &client,
+        || client.capture_recovery(&recovery, &context),
+        || {
+            recorder
+                .events_without_pressure()
+                .iter()
+                .any(|e| e["event_type"] == "diagnostic_context")
+        },
+    );
+
+    let events = recorder.events_without_pressure();
+    assert_eq!(events.len(), 2);
+    assert!(events.iter().all(debugbundle::wire::valid_event));
+    assert!(!serde_json::to_string(&events)
+        .unwrap()
+        .contains("SYNTHETIC_"));
+
+    let exc = events
+        .iter()
+        .find(|e| e["event_type"] == "backend_exception")
+        .unwrap();
+    assert_eq!(
+        exc["context"]["evidence_reference"],
+        json!({
+            "version": 1,
+            "failure_ref": failure_ref,
+            "scope": {"kind": "operation", "operation_id": op_id}
+        })
+    );
+    assert_eq!(
+        exc["context"]["payout"],
+        json!({
+            "tag": "[REDACTED]",
+            "reference": "[REDACTED]",
+            "reason": "[REDACTED]",
+            "file": "[REDACTED]"
+        })
+    );
+    assert!(exc["payload"]["exception_evidence"]["unavailable_reason"].is_null());
+    assert_eq!(
+        exc["payload"]["exception_evidence"]["nodes"][0]["message"],
+        "reintroduced reason=[REDACTED]"
+    );
+    assert_eq!(
+        exc["payload"]["exception_evidence"]["nodes"][0]["frames"][0]["file"],
+        "/app/src/payout.rs"
+    );
+    assert_eq!(
+        exc["payload"]["exception_evidence"]["nodes"][0]["frames"][1]["file"],
+        "https://cdn.example.test/app.js?token=%5BREDACTED%5D&file=%5BREDACTED%5D"
+    );
+    assert_eq!(exc["payload"]["execution"]["kind"], "job");
+    assert_eq!(
+        exc["payload"]["execution"]["name"],
+        "payout.run tag=[REDACTED]"
+    );
+
+    let diag = events
+        .iter()
+        .find(|e| e["event_type"] == "diagnostic_context")
+        .unwrap();
+    assert_eq!(diag["payload"]["failure_ref"], failure_ref);
+    assert_eq!(diag["payload"]["attempt_id"], attempt_id);
+    assert_eq!(diag["payload"]["scope"]["operation_id"], op_id);
+    assert_eq!(diag["payload"]["operation"], "retry tag=[REDACTED]");
+    assert_eq!(diag["context"]["payout"]["reference"], "[REDACTED]");
+    assert!(client.shutdown(Duration::from_secs(2)).drained);
 }

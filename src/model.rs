@@ -190,8 +190,7 @@ impl Context {
     }
     pub(crate) fn protect_with(mut self, privacy: &Privacy) -> Self {
         self.data = Arc::new(
-            privacy
-                .protect(self.as_value())
+            crate::wire::protect_context(privacy, self.as_value())
                 .filter(Value::is_object)
                 .unwrap_or_else(|| json!({})),
         );

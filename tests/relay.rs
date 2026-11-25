@@ -277,3 +277,311 @@ async fn relay_origin_cors_content_type_and_capacity_are_fail_closed() {
     assert_eq!(relay.handle(&head, &body).await.status, 202);
     assert_eq!(relay.handle(&head, &body).await.status, 429);
 }
+
+#[tokio::test]
+async fn relay_preserves_browser_protocol_structures_under_broad_and_exact_redaction() {
+    let failure_ref = "11111111-1111-4111-8111-111111111111";
+    let page_id = "22222222-2222-4222-8222-222222222222";
+    let source_event_id = "33333333-3333-4333-8333-333333333333";
+
+    let build_frontend = |id: &str, tag_name: &str| {
+        let mut event = browser_event();
+        event["event_id"] = json!(id);
+        event["correlation"]["session_id"] = json!("44444444-4444-4444-8444-444444444444");
+        event["context"] = json!({
+            "evidence_reference": {
+                "version": 1,
+                "failure_ref": failure_ref,
+                "scope": {"kind": "page", "page_id": page_id}
+            },
+            "evidence_limits": {
+                "version": 1,
+                "exception_evidence": "unsupported"
+            },
+            "payout": {
+                "tag": "SYNTHETIC_TAG",
+                "tag_name": "script",
+                "reference": "SYNTHETIC_REF",
+                "reason": "SYNTHETIC_REASON",
+                "file": "SYNTHETIC_FILE"
+            }
+        });
+        event["payload"]["message"] = json!("chunk failed tag=SYNTHETIC_MSG_TAG tag_name=script");
+        event["payload"]["browser_event"] = json!({
+            "kind": "resource_error",
+            "message": "load failed tag=SYNTHETIC_BE_MSG",
+            "file_name": "https://cdn.example.test/app.js?token=SYNTHETIC_FN_TOKEN&file=SYNTHETIC_FN_FILE",
+            "line_number": 12,
+            "column_number": 4,
+            "target": {
+                "tag_name": tag_name,
+                "source_url": "https://cdn.example.test/bundle.js?tag=SYNTHETIC_SRC_TAG&tag_name=script&safe=1",
+                "attributes": {
+                    "rel": "preload",
+                    "as": "script",
+                    "type": "text/javascript",
+                    "media": "all",
+                    "cross_origin": "anonymous",
+                    "async": true,
+                    "defer": false,
+                    "integrity_present": true
+                }
+            },
+            "page": {
+                "url": "https://app.example.com/pay?reference=SYNTHETIC_PAGE_REF&ok=1",
+                "referrer": "https://app.example.com/cart?reason=SYNTHETIC_REFERRER_REASON",
+                "ready_state": "complete",
+                "visibility_state": "visible"
+            },
+            "opaque": false
+        });
+        event["payload"]["rejection_reason"] = json!({
+            "kind": "error",
+            "name": "ChunkLoadError",
+            "message": "rejected reason=SYNTHETIC_REJ_REASON",
+            "preview": "{\"tag\":\"SYNTHETIC_PREVIEW_TAG\",\"tag_name\":\"script\"}"
+        });
+        event["payload"]["resource_observations"] = json!({
+            "version": 1,
+            "items": [
+                {
+                    "kind": "timing",
+                    "observed_at": "2026-11-25T10:00:00.000Z",
+                    "source_url": "https://cdn.example.test/bundle.js",
+                    "availability": "observed",
+                    "response_status": 502,
+                    "duration_ms": 42.5,
+                    "transfer_size_bytes": 1024
+                },
+                {
+                    "kind": "csp",
+                    "observed_at": "2026-11-25T10:00:00.000Z",
+                    "source_url": "https://cdn.example.test/bundle.js",
+                    "effective_directive": "script-src",
+                    "disposition": "enforce",
+                    "document_status_code": 200
+                }
+            ]
+        });
+        event["payload"]["exception_evidence"] = json!({
+            "version": 1,
+            "runtime": "browser",
+            "root_id": 0,
+            "nodes": [{
+                "id": 0,
+                "name": "ChunkLoadError",
+                "message": "graph reason=SYNTHETIC_GRAPH_REASON",
+                "stack": "ChunkLoadError\n at https://cdn.example.test/app.js?token=SYNTHETIC_STACK_TOKEN:10:2",
+                "trace_origin": "throw",
+                "parsing_status": "parsed",
+                "frames": [{
+                    "function": "loadChunk",
+                    "file": "https://cdn.example.test/chunk.js",
+                    "line": 10,
+                    "column": 2,
+                    "classification": "application"
+                }],
+                "relationships": []
+            }],
+            "truncated": false,
+            "unavailable_reason": null
+        });
+        event
+    };
+
+    let diagnostic_resource = json!({
+        "schema_version": "2026-03-01",
+        "event_id": "55555555-5555-4555-8555-555555555555",
+        "event_type": "diagnostic_context",
+        "sdk_name": "@debugbundle/sdk-browser",
+        "sdk_version": "3.2.2",
+        "occurred_at": "2026-11-25T10:00:01.000Z",
+        "service": {"name": "checkout-web", "runtime": "browser", "framework": "react", "environment": "production"},
+        "correlation": {"request_id": null, "trace_id": "11111111-1111-4111-8111-111111111111", "session_id": "44444444-4444-4444-8444-444444444444", "user_id_hash": null},
+        "context": {"payout": {"reference": "SYNTHETIC_DIAG_REF"}},
+        "payload": {
+            "version": 1,
+            "kind": "resource_observation",
+            "failure_ref": failure_ref,
+            "scope": {"kind": "page", "page_id": page_id},
+            "source_event_id": source_event_id,
+            "observations": {
+                "version": 1,
+                "items": [{
+                    "kind": "timing",
+                    "observed_at": "2026-11-25T10:00:01.000Z",
+                    "source_url": "https://cdn.example.test/late.js",
+                    "availability": "observed",
+                    "response_status": 404,
+                    "duration_ms": 18.0,
+                    "transfer_size_bytes": 0
+                }]
+            }
+        }
+    });
+
+    // Broad redact_fields protects application context while preserving validated protocol blocks.
+    let broad_dir = tempfile::tempdir().unwrap();
+    let mut broad_config = Config::local("checkout", broad_dir.path().join("events"))
+        .with_redact_fields(["tag", "reference", "reason", "file"]);
+    broad_config.evidence_capabilities = Some(json!({
+        "version": 1,
+        "features": debugbundle::wire::FEATURES
+    }));
+    broad_config.before_send = Some(std::sync::Arc::new(|mut event| {
+        if event["event_type"] == "frontend_exception" {
+            event["context"]["payout"]["file"] = json!("SYNTHETIC_HOOK_FILE");
+        }
+        Some(event)
+    }));
+    let broad_relay = Relay::new(Client::new(broad_config), RelayOptions::default());
+    let mut head = request();
+    head.evidence = true;
+    let broad_body = serde_json::to_vec(&json!({
+        "batch": [
+            build_frontend(source_event_id, "script"),
+            build_frontend("66666666-6666-4666-8666-666666666666", "div"),
+            diagnostic_resource
+        ]
+    }))
+    .unwrap();
+    let broad_response = broad_relay.handle(&head, &broad_body).await;
+    assert_eq!(broad_response.status, 202);
+    assert_eq!(broad_response.body.as_ref().unwrap()["accepted"], 3);
+    assert_eq!(broad_response.body.as_ref().unwrap()["rejected"], 0);
+
+    let file = std::fs::read_dir(broad_dir.path().join("events"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap();
+    let bytes = std::fs::read(file.path()).unwrap();
+    assert!(!String::from_utf8(bytes.clone())
+        .unwrap()
+        .contains("SYNTHETIC_"));
+    let events: Value = serde_json::from_slice(&bytes).unwrap();
+    let first = &events[0];
+    assert_eq!(
+        first["context"]["evidence_reference"],
+        json!({"version": 1, "failure_ref": failure_ref, "scope": {"kind": "page", "page_id": page_id}})
+    );
+    assert_eq!(
+        first["context"]["evidence_limits"],
+        json!({"version": 1, "exception_evidence": "unsupported"})
+    );
+    assert_eq!(
+        first["context"]["payout"],
+        json!({
+            "tag": "[REDACTED]",
+            "tag_name": "[REDACTED]",
+            "reference": "[REDACTED]",
+            "reason": "[REDACTED]",
+            "file": "[REDACTED]"
+        })
+    );
+    assert_eq!(
+        first["payload"]["browser_event"]["target"]["tag_name"],
+        "script"
+    );
+    assert_eq!(
+        first["payload"]["browser_event"]["message"],
+        "load failed tag=[REDACTED]"
+    );
+    assert_eq!(
+        first["payload"]["browser_event"]["file_name"],
+        "https://cdn.example.test/app.js?token=%5BREDACTED%5D&file=%5BREDACTED%5D"
+    );
+    assert_eq!(
+        first["payload"]["browser_event"]["target"]["source_url"],
+        "https://cdn.example.test/bundle.js?tag=%5BREDACTED%5D&tag_name=%5BREDACTED%5D&safe=1"
+    );
+    assert_eq!(
+        first["payload"]["browser_event"]["page"]["url"],
+        "https://app.example.com/pay?reference=%5BREDACTED%5D&ok=1"
+    );
+    assert_eq!(
+        first["payload"]["browser_event"]["page"]["referrer"],
+        "https://app.example.com/cart?reason=%5BREDACTED%5D"
+    );
+    assert_eq!(
+        first["payload"]["browser_event"]["page"]["ready_state"],
+        "complete"
+    );
+    assert_eq!(
+        first["payload"]["browser_event"]["page"]["visibility_state"],
+        "visible"
+    );
+    assert_eq!(first["payload"]["rejection_reason"]["kind"], "error");
+    assert_eq!(
+        first["payload"]["rejection_reason"]["message"],
+        "rejected reason=[REDACTED]"
+    );
+    assert_eq!(
+        first["payload"]["rejection_reason"]["preview"],
+        "{\"tag\":\"[REDACTED]\",\"tag_name\":\"[REDACTED]\"}"
+    );
+    assert_eq!(
+        first["payload"]["exception_evidence"]["nodes"][0]["frames"][0]["file"],
+        "https://cdn.example.test/chunk.js"
+    );
+    assert_eq!(
+        first["payload"]["resource_observations"]["items"][0]["availability"],
+        "observed"
+    );
+    assert_eq!(
+        first["payload"]["resource_observations"]["items"][1]["effective_directive"],
+        "script-src"
+    );
+    // Non-allowlisted tag_name is redacted under broad `redact_fields: ["tag"]`.
+    assert_eq!(
+        events[1]["payload"]["browser_event"]["target"]["tag_name"],
+        "[REDACTED]"
+    );
+    // Diagnostic context resource_observation is preserved while custom context is redacted.
+    assert_eq!(events[2]["event_type"], "diagnostic_context");
+    assert_eq!(events[2]["payload"]["failure_ref"], failure_ref);
+    assert_eq!(events[2]["context"]["payout"]["reference"], "[REDACTED]");
+
+    // Exact-key redaction masks `tag` while preserving `tag_name` including non-allowlisted tags.
+    let exact_dir = tempfile::tempdir().unwrap();
+    let mut exact_config = Config::local("checkout", exact_dir.path().join("events"))
+        .with_redact_exact_fields(["tag"]);
+    exact_config.evidence_capabilities = Some(json!({
+        "version": 1,
+        "features": debugbundle::wire::FEATURES
+    }));
+    let exact_relay = Relay::new(Client::new(exact_config), RelayOptions::default());
+    let exact_body = serde_json::to_vec(&json!({
+        "batch": [build_frontend("77777777-7777-4777-8777-777777777777", "div")]
+    }))
+    .unwrap();
+    let exact_response = exact_relay.handle(&head, &exact_body).await;
+    assert_eq!(exact_response.status, 202);
+    assert_eq!(exact_response.body.as_ref().unwrap()["accepted"], 1);
+    let exact_file = std::fs::read_dir(exact_dir.path().join("events"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap();
+    let exact_events: Value =
+        serde_json::from_slice(&std::fs::read(exact_file.path()).unwrap()).unwrap();
+    let exact_event = &exact_events[0];
+    assert_eq!(exact_event["context"]["payout"]["tag"], "[REDACTED]");
+    assert_eq!(exact_event["context"]["payout"]["tag_name"], "script");
+    assert_eq!(
+        exact_event["payload"]["message"],
+        "chunk failed tag=[REDACTED] tag_name=script"
+    );
+    assert_eq!(
+        exact_event["payload"]["browser_event"]["target"]["tag_name"],
+        "div"
+    );
+    assert_eq!(
+        exact_event["payload"]["browser_event"]["target"]["source_url"],
+        "https://cdn.example.test/bundle.js?tag=%5BREDACTED%5D&tag_name=script&safe=1"
+    );
+    assert_eq!(
+        exact_event["payload"]["rejection_reason"]["preview"],
+        "{\"tag\":\"[REDACTED]\",\"tag_name\":\"script\"}"
+    );
+}

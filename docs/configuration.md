@@ -24,7 +24,8 @@ for applications that want to check bootstrap configuration explicitly.
 | `max_buffered_bytes` | 8 MiB | 1 KiB–8 MiB, including in-flight entries and finalized tails. This is an event-byte allowance, not a total heap guarantee. |
 | `max_event_age` | 10 minutes | Greater than zero, at most 10 minutes from original admission. Retries never refresh age. Diagnostics have their tighter five-minute association window. |
 | `request_timeout` | 5 seconds | Greater than zero, at most 30 seconds. Whole-response deadline; flush uses its remaining common deadline. |
-| `redact_fields` | empty | Additional field-name rules; cannot disable mandatory privacy. Invalid/over-budget rules fail validation. |
+| `redact_fields` | empty | Additional broad segment-matched field-name rules (`Config::with_redact_fields`); cannot disable mandatory privacy. Shares the 128-key / 64-byte limit with `redact_exact_fields`. Invalid/over-budget rules fail validation. |
+| `redact_exact_fields` | empty | Additional ASCII case-insensitive exact-key and query-parameter rules with punctuation significant (`Config::with_redact_exact_fields`), e.g. `tag` masks `tag`/`TAG` without masking `tag_name`/`tagName`/`tag-name`. Additive to mandatory privacy; shares the 128-key / 64-byte limit with `redact_fields`. |
 | `before_send` | `None` | `Arc<dyn Fn(Value) -> Option<Value> + Send + Sync>`; runs on the client's one bounded callback worker after initial privacy, followed by validation/privacy/policy again. `None` return drops the event. |
 | `relay_rate_limit_store` | `None` | With `local`: optional shared `RateLimitStore`, called with bounded wait on the callback worker. Store failure fails relay admission closed. |
 | `transport` | `None` | Optional owned custom `delivery::Transport`; default is native HTTP when enabled. Invoked on the callback worker. No HTTP feature requires an explicit transport in connected mode. |
