@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-25
+
+- Apply exact-key privacy to captured events and relayed browser evidence while preserving validated protocol fields.
+
 ## [1.0.2] - 2026-11-15
 
 - Withhold hook replacements that exceed bounded JSON validation before optional-field reduction. Unvalidated malformed evidence cannot be silently repaired or restore pre-hook content.
