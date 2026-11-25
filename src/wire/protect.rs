@@ -781,7 +781,21 @@ pub fn protect_event(privacy: &Privacy, event: &Value) -> Option<Value> {
         reduced = super::without_optional(event)?;
         &reduced
     };
-    let mut output = event.clone();
+    // Clone only the envelope fields that survive this projection. The three
+    // protected sections may contain a large graph that is rebuilt below.
+    let mut output = Value::Object(
+        event
+            .as_object()?
+            .iter()
+            .filter(|(key, _)| {
+                !matches!(
+                    key.as_str(),
+                    "payload" | "context" | "service" | "project_token"
+                )
+            })
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect(),
+    );
     let event_type = event
         .get("event_type")
         .and_then(Value::as_str)
@@ -813,7 +827,7 @@ pub fn protect_event(privacy: &Privacy, event: &Value) -> Option<Value> {
         }
     }
     if let Some(correlation) = event.get("correlation").and_then(Value::as_object) {
-        for (key, value) in correlation {
+        for value in correlation.values() {
             if let Some(text) = value.as_str() {
                 if privacy.text(text) != text {
                     return None;
@@ -822,7 +836,6 @@ pub fn protect_event(privacy: &Privacy, event: &Value) -> Option<Value> {
             if value.is_array() || value.is_object() {
                 return None;
             }
-            output["correlation"][key] = value.clone();
         }
     }
     for key in [
@@ -838,9 +851,6 @@ pub fn protect_event(privacy: &Privacy, event: &Value) -> Option<Value> {
                 return None;
             }
         }
-    }
-    if let Some(root) = output.as_object_mut() {
-        root.remove("project_token");
     }
     // Optional evidence must also yield at its combined semantic byte limit or
     // when mandatory/custom scrubbing expands an otherwise valid optional field.

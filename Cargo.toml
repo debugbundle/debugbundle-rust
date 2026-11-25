@@ -1,6 +1,6 @@
 [package]
 name = "debugbundle"
-version = "1.1.0"
+version = "1.1.1"
 edition = "2021"
 rust-version = "1.89"
 description = "Safe, bounded runtime error reporting for Rust, Axum and Actix Web"
@@ -18,7 +18,7 @@ http = ["dep:reqwest"]
 local = ["dep:rustix", "dep:windows-sys"]
 tower = ["dep:tower", "dep:http", "dep:http-body"]
 axum = ["tower", "local", "http", "dep:axum"]
-actix-web = ["local", "http", "dep:actix-web", "dep:futures-util"]
+actix-web = ["local", "http", "dep:actix-web", "dep:actix-http", "dep:futures-util"]
 tracing = ["dep:tracing", "dep:tracing-subscriber"]
 log = ["dep:log"]
 testkit = []
@@ -30,7 +30,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 getrandom = "0.4"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 regex = "1"
-url = "2"
+url = "2.5.9"
 percent-encoding = "2"
 sha2 = "0.10"
 hmac = "0.12"
@@ -45,6 +45,8 @@ http = { version = "1", optional = true }
 http-body = { version = "1", optional = true }
 axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio", "matched-path", "json"], optional = true }
 actix-web = { version = "4.19.0", default-features = false, features = ["macros"], optional = true }
+# Keep the patched HTTP parser floor for library consumers with their own locks.
+actix-http = { version = "3.21.3", default-features = false, optional = true }
 futures-util = { version = "0.3", optional = true }
 tracing = { version = "0.1.44", optional = true }
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["registry", "std"], optional = true }

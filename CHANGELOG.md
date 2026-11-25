@@ -2,9 +2,11 @@
 
 ## [Unreleased]
 
-## [1.1.0] - 2026-11-25
+## [1.1.1] - 2026-11-25
 
 - Apply exact-key privacy to captured events and relayed browser evidence while preserving validated protocol fields.
+- Require patched `url` and `actix-http` versions for the relevant SDK features. The 1.1.0 candidate stopped at the dependency audit.
+- Avoid cloning protected sections that the event boundary rebuilds to stay within the existing capture allocation budget.
 
 ## [1.0.2] - 2026-11-15
 
